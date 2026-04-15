@@ -4,12 +4,17 @@
  * metrics against ground truth. Also simulates BERT-NER and Rule-Based baselines.
  */
 
-import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.49.4/dist/module/lib/cors-headers.js";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const AI_GATEWAY = "https://ai-gateway.lovable.dev/v1/chat/completions";
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
