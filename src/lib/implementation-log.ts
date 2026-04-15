@@ -193,6 +193,28 @@ export const implementationLog: LogEntry[] = [
       "src/App.tsx",
     ],
   },
+  {
+    version: "2.0.0",
+    date: "2026-04-15",
+    title: "Two-Stage Experiment Framework with Live Runner",
+    category: "pipeline",
+    impact: "major",
+    changes: [
+      "Stage 1: MITRE ATT&CK + CAPEC datasets (1,000 samples, core CTI ontology)",
+      "Stage 2: + NVD/CVE + STIX/TAXII feeds (3,050 samples, scale & diversity)",
+      "Baselines: BERT-NER (SecureBERT) and Rule-Based extraction engine",
+      "Experiment runner edge function with live LLM evaluation",
+      "Per-task breakdown: NER, RE, Causality, Attribution, Hallucination Control",
+      "Scale effect analysis: Stage 1 → Stage 2 degradation comparison",
+      "Live experiment runner with real-time metric computation against ground truth",
+      "Dataset cards with entity type and sample count metadata",
+    ],
+    filesModified: [
+      "src/lib/experiment-config.ts",
+      "src/pages/Experiments.tsx",
+      "supabase/functions/experiment-runner/index.ts",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
