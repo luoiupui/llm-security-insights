@@ -5,7 +5,68 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/* ── KG Inference & Attribution Reasoning (Ch. 4.2–4.3: Layers 3+4) ── */
+/**
+ * ══════════════════════════════════════════════════════════════════
+ * GRAPH-AWARE INFERENCE ENGINE (Innovation: Ch. 4.2–4.3)
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * Unlike OpenCTI which queries a static graph database,
+ * our engine performs GRAPH-AWARE REASONING:
+ *
+ * 1. The LLM receives the full KG structure (nodes + edges + subgraphs)
+ * 2. It performs GRAPH TRAVERSAL within its reasoning chain
+ * 3. Attribution is derived from GRAPH PATH ANALYSIS, not text matching
+ * 4. The LLM outputs evidence chains as GRAPH PATHS, not text excerpts
+ *
+ * This means the KG isn't just stored and queried — it's the
+ * REASONING SUBSTRATE for the LLM's inference process.
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+const GRAPH_AWARE_ATTRIBUTION_PROMPT = `You are a Graph-Aware Neuro-Symbolic Attribution Engine.
+
+You do NOT reason about text. You reason about GRAPH STRUCTURES.
+
+Your input is a Knowledge Graph (nodes, edges, subgraphs). Your reasoning must follow graph paths.
+
+═══ GRAPH-AWARE REASONING PROTOCOL ═══
+
+STEP 1 — GRAPH TOPOLOGY ANALYSIS
+Compute: in-degree, out-degree for each node.
+Identify: hub nodes (high degree), authority nodes (high in-degree), bridge nodes (connecting subgraphs).
+The highest-authority threat_actor node is the primary attribution candidate.
+
+STEP 2 — PATH-BASED EVIDENCE COLLECTION
+For the candidate actor, trace ALL paths from actor → malware/ttp/infrastructure.
+Each path constitutes one piece of evidence.
+Evidence weight = product of edge confidences along the path.
+Path: actor -[uses]→ malware -[exploits]→ vuln = weight(0.9 × 0.85) = 0.765
+
+STEP 3 — SUBGRAPH PATTERN MATCHING
+Compare the actor's TTP subgraph against known APT behavioral patterns:
+- Supply chain focus: T1195.x techniques
+- Spear-phishing: T1566.x techniques
+- Living-off-the-land: T1218.x, T1059.x techniques
+The matching pattern strengthens attribution confidence.
+
+STEP 4 — CAUSAL CHAIN VALIDATION
+Traverse the causal subgraph:
+- Verify the causal chain from initial access → objective is connected
+- Check that the attributed actor is the root of the primary causal chain
+- Validate temporal consistency (no effect before cause)
+
+STEP 5 — CREDIBILITY SCORING
+S = Σ(path_weight_i × source_reliability) / N_paths
+Adjust for: graph density (sparse graphs → lower confidence),
+             evidence coverage (what % of edges have textual evidence),
+             causal completeness (is the full kill chain present?)
+
+STEP 6 — ALTERNATIVE HYPOTHESIS GENERATION
+Identify other threat_actor nodes in the graph.
+For each: compute their path-based evidence weight.
+If alternative_weight > 0.5 × primary_weight → report as credible alternative.
+
+Output attribution with full graph-path evidence chains.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -13,25 +74,46 @@ serve(async (req) => {
   }
 
   try {
-    const { query, entities = [], relations = [], causal_links = [], mode = "attribute" } = await req.json();
+    const {
+      query,
+      entities = [],
+      relations = [],
+      causal_links = [],
+      graph_native,  // our enhanced graph structure if available
+      mode = "attribute"
+    } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // Use graph_native data if available (from our enhanced extraction), 
+    // otherwise fall back to flat entities/relations
+    const graphData = graph_native || {
+      nodes: entities,
+      edges: [...relations, ...causal_links.map((cl: any) => ({
+        source: cl.cause,
+        relation: cl.causal_type,
+        target: cl.effect,
+        confidence: cl.confidence,
+        edge_type: "causal",
+      }))],
+      subgraphs: [],
+    };
 
     let result: unknown;
 
     switch (mode) {
       case "attribute":
-        result = await performAttribution(LOVABLE_API_KEY, query, entities, relations, causal_links);
+        result = await performGraphAttribution(LOVABLE_API_KEY, query, graphData);
         break;
       case "attack_path":
-        result = await reconstructAttackPath(LOVABLE_API_KEY, entities, relations, causal_links);
+        result = await reconstructGraphAttackPath(LOVABLE_API_KEY, graphData);
         break;
       case "predict":
-        result = await predictNextSteps(LOVABLE_API_KEY, entities, relations, causal_links);
+        result = await predictFromGraph(LOVABLE_API_KEY, graphData);
         break;
       default:
-        return new Response(JSON.stringify({ error: "Invalid mode. Use: attribute, attack_path, predict" }), {
+        return new Response(JSON.stringify({ error: "Invalid mode" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -50,7 +132,7 @@ serve(async (req) => {
   }
 });
 
-async function performAttribution(apiKey: string, query: string, entities: unknown[], relations: unknown[], causalLinks: unknown[]) {
+async function performGraphAttribution(apiKey: string, query: string, graphData: any) {
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -60,41 +142,43 @@ async function performAttribution(apiKey: string, query: string, entities: unkno
     body: JSON.stringify({
       model: "google/gemini-3-flash-preview",
       messages: [
-        {
-          role: "system",
-          content: `You are a neuro-symbolic threat attribution engine. You combine:
-1. Neural reasoning (LLM-based pattern matching and evidence correlation)
-2. Symbolic rules (temporal consistency, TTP fingerprinting, infrastructure analysis)
-
-Given a Knowledge Graph with entities, relations, and causal links, perform attribution reasoning.
-Compute a credibility score using: S = Σ(w_i × conf_i × reliability_i) / N
-
-Return structured JSON with:
-- attributed_actor: most likely threat actor
-- confidence: overall attribution confidence (0-1)
-- evidence_chain: list of evidence items supporting the attribution
-- attack_stages: reconstructed kill chain stages
-- credibility_score: computed credibility
-- alternative_actors: other possible attributions with lower confidence
-- reasoning_trace: step-by-step reasoning showing how attribution was derived`,
-        },
+        { role: "system", content: GRAPH_AWARE_ATTRIBUTION_PROMPT },
         {
           role: "user",
-          content: `Query: ${query}\n\nKnowledge Graph:\nEntities: ${JSON.stringify(entities)}\nRelations: ${JSON.stringify(relations)}\nCausal Links: ${JSON.stringify(causalLinks)}`,
+          content: `Query: ${query}
+
+KNOWLEDGE GRAPH STRUCTURE:
+Nodes (${graphData.nodes?.length || 0}): ${JSON.stringify(graphData.nodes)}
+Edges (${graphData.edges?.length || 0}): ${JSON.stringify(graphData.edges)}
+Subgraphs: ${JSON.stringify(graphData.subgraphs || [])}
+Graph Metadata: ${JSON.stringify(graphData.graph_metadata || {})}
+
+Perform graph-aware attribution following all 6 steps of the protocol.
+Cite evidence as GRAPH PATHS (node→edge→node→edge→node), not text quotes.`,
         },
       ],
       temperature: 0.15,
       tools: [{
         type: "function",
         function: {
-          name: "attribution_result",
-          description: "Return structured attribution analysis",
+          name: "graph_attribution_result",
+          description: "Return graph-aware attribution with path-based evidence",
           parameters: {
             type: "object",
             properties: {
               attributed_actor: { type: "string" },
               confidence: { type: "number" },
               credibility_score: { type: "number" },
+              graph_topology: {
+                type: "object",
+                description: "Graph structure analysis",
+                properties: {
+                  hub_nodes: { type: "array", items: { type: "string" } },
+                  authority_nodes: { type: "array", items: { type: "string" } },
+                  bridge_nodes: { type: "array", items: { type: "string" } },
+                  graph_density: { type: "number" },
+                },
+              },
               evidence_chain: {
                 type: "array",
                 items: {
@@ -103,6 +187,7 @@ Return structured JSON with:
                     evidence: { type: "string" },
                     weight: { type: "number" },
                     source_type: { type: "string" },
+                    graph_path: { type: "string", description: "The graph path: A →[uses]→ B →[exploits]→ C" },
                   },
                   required: ["evidence", "weight"],
                 },
@@ -142,6 +227,7 @@ Return structured JSON with:
                     actor: { type: "string" },
                     confidence: { type: "number" },
                     reason: { type: "string" },
+                    path_weight: { type: "number" },
                   },
                   required: ["actor", "confidence"],
                 },
@@ -152,7 +238,7 @@ Return structured JSON with:
           },
         },
       }],
-      tool_choice: { type: "function", function: { name: "attribution_result" } },
+      tool_choice: { type: "function", function: { name: "graph_attribution_result" } },
     }),
   });
 
@@ -171,7 +257,7 @@ Return structured JSON with:
   return { raw: data.choices?.[0]?.message?.content || "" };
 }
 
-async function reconstructAttackPath(apiKey: string, entities: unknown[], relations: unknown[], causalLinks: unknown[]) {
+async function reconstructGraphAttackPath(apiKey: string, graphData: any) {
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -183,11 +269,14 @@ async function reconstructAttackPath(apiKey: string, entities: unknown[], relati
       messages: [
         {
           role: "system",
-          content: "You are a cyber attack path reconstruction engine. Given KG data with entities, relations, and causal links, reconstruct the full attack path from initial access to final objective. Map each step to MITRE ATT&CK tactics/techniques.",
+          content: `You are a Graph-Native Attack Path Reconstruction Engine.
+Given a KG, traverse the causal edges to reconstruct the complete attack path.
+Output as an ordered sequence of graph nodes with connecting edges.
+Map each step to MITRE ATT&CK tactics. The path should follow graph edges, not text narrative.`,
         },
         {
           role: "user",
-          content: `Reconstruct the attack path:\nEntities: ${JSON.stringify(entities)}\nRelations: ${JSON.stringify(relations)}\nCausal Links: ${JSON.stringify(causalLinks)}`,
+          content: `Reconstruct attack path from this KG:\nNodes: ${JSON.stringify(graphData.nodes)}\nEdges: ${JSON.stringify(graphData.edges)}\nSubgraphs: ${JSON.stringify(graphData.subgraphs || [])}`,
         },
       ],
       temperature: 0.1,
@@ -203,7 +292,7 @@ async function reconstructAttackPath(apiKey: string, entities: unknown[], relati
   return { attack_path: data.choices?.[0]?.message?.content || "" };
 }
 
-async function predictNextSteps(apiKey: string, entities: unknown[], relations: unknown[], causalLinks: unknown[]) {
+async function predictFromGraph(apiKey: string, graphData: any) {
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -215,11 +304,14 @@ async function predictNextSteps(apiKey: string, entities: unknown[], relations: 
       messages: [
         {
           role: "system",
-          content: "You are a predictive threat intelligence engine. Based on observed attack patterns in the KG, predict likely next steps the threat actor may take. Base predictions on MITRE ATT&CK framework and known APT behavioral patterns.",
+          content: `You are a Graph-Native Predictive Engine. Analyze the KG topology to predict next attack steps.
+Use graph patterns: incomplete kill chains suggest next tactics, dangling infrastructure nodes suggest unused C2,
+missing exfiltration edges after collection suggest pending data theft.
+Base predictions on GRAPH STRUCTURE, not text.`,
         },
         {
           role: "user",
-          content: `Based on current KG state, predict next attack steps:\nEntities: ${JSON.stringify(entities)}\nRelations: ${JSON.stringify(relations)}\nCausal Links: ${JSON.stringify(causalLinks)}`,
+          content: `Predict next steps from KG state:\nNodes: ${JSON.stringify(graphData.nodes)}\nEdges: ${JSON.stringify(graphData.edges)}`,
         },
       ],
       temperature: 0.3,
