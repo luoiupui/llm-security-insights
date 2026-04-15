@@ -12,6 +12,7 @@ import {
   type ThreatEntity,
   type ThreatRelation,
   type CausalLink,
+  type GraphNative,
 } from "@/lib/threat-pipeline";
 import { toast } from "sonner";
 
@@ -56,14 +57,14 @@ export function useThreatPipeline() {
   }, []);
 
   const runExtraction = useCallback(async (text: string, mode: "full" | "ner" | "re" | "causality" = "full", sourceType?: string, reliability?: number) => {
-    setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "LLM Extraction..." }));
+    setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Graph-Native LLM Extraction..." }));
     try {
       const result = await extractThreats(text, mode, sourceType, reliability);
-      setState((s) => ({ ...s, extraction: result, currentStep: "Extraction complete" }));
-      const entityCount = result.ner?.entities?.length || 0;
-      const relCount = result.re?.relations?.length || 0;
+      setState((s) => ({ ...s, extraction: result, currentStep: "Graph-Native Extraction complete" }));
+      const nodeCount = result.graph_native?.nodes?.length || result.ner?.entities?.length || 0;
+      const edgeCount = result.graph_native?.edges?.length || result.re?.relations?.length || 0;
       const causalCount = result.causality?.causal_links?.length || 0;
-      toast.success(`Extracted: ${entityCount} entities, ${relCount} relations, ${causalCount} causal links`);
+      toast.success(`Graph-Native: ${nodeCount} nodes, ${edgeCount} edges, ${causalCount} causal links`);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Extraction failed";
@@ -75,12 +76,12 @@ export function useThreatPipeline() {
     }
   }, []);
 
-  const runConflictDetection = useCallback(async (entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[], reliability?: number) => {
-    setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Conflict detection..." }));
+  const runConflictDetection = useCallback(async (entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[], reliability?: number, graphNative?: GraphNative) => {
+    setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Graph-Integrated Conflict detection..." }));
     try {
-      const result = await detectConflicts(entities, relations, causalLinks, reliability);
+      const result = await detectConflicts(entities, relations, causalLinks, reliability, graphNative);
       setState((s) => ({ ...s, conflicts: result, currentStep: "Conflict detection complete" }));
-      toast.success(`Conflicts: ${result.summary.passed} passed, ${result.summary.warnings} warnings, ${result.summary.failures} failures`);
+      toast.success(`Conflicts: ${result.summary.passed} passed, ${result.summary.warnings} warnings, ${result.summary.failures} failures (${result.summary.total_rules} rules)`);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Conflict detection failed";
@@ -92,10 +93,10 @@ export function useThreatPipeline() {
     }
   }, []);
 
-  const runAttribution = useCallback(async (query: string, entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[]) => {
-    setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Attribution reasoning..." }));
+  const runAttribution = useCallback(async (query: string, entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[], graphNative?: GraphNative) => {
+    setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Graph-Aware Attribution..." }));
     try {
-      const result = await performAttribution(query, entities, relations, causalLinks);
+      const result = await performAttribution(query, entities, relations, causalLinks, graphNative);
       setState((s) => ({ ...s, attribution: result, currentStep: "Attribution complete" }));
       toast.success(`Attributed to: ${result.attributed_actor} (${(result.confidence * 100).toFixed(0)}% confidence)`);
       return result;
@@ -112,7 +113,7 @@ export function useThreatPipeline() {
   const runFull = useCallback(async (rawText: string, sourceType?: string, query?: string) => {
     setState({
       isProcessing: true,
-      currentStep: "Starting full pipeline...",
+      currentStep: "Starting Graph-Native Pipeline...",
       preprocessing: null,
       extraction: null,
       conflicts: null,
@@ -131,7 +132,7 @@ export function useThreatPipeline() {
         attribution: result.attribution,
         error: null,
       });
-      toast.success(`Full pipeline complete — attributed to ${result.attribution.attributed_actor}`);
+      toast.success(`Graph-Native pipeline complete — attributed to ${result.attribution.attributed_actor}`);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Pipeline failed";

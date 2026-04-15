@@ -1,11 +1,11 @@
 /**
  * Threat Intelligence Pipeline Client
- * Connects to edge functions for the 4-layer LLM-driven architecture (Ch. 3.1)
+ * Graph-Native LLM Architecture (Innovation beyond OpenCTI)
  * 
  * Layer 1: Data Acquisition → threat-preprocess
- * Layer 2: LLM Extraction → threat-extract  
- * Layer 3: KG Storage → in-memory temporal KG
- * Layer 4: Inference → threat-kg-query + threat-conflicts
+ * Layer 2: Graph-Native LLM Extraction → threat-extract (KG built WITHIN reasoning)
+ * Layer 3: KG Storage → in-memory temporal KG with graph_native structure
+ * Layer 4: Graph-Aware Inference → threat-kg-query + threat-conflicts
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -14,10 +14,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface ThreatEntity {
   name: string;
-  type: "threat_actor" | "malware" | "vulnerability" | "ttp" | "infrastructure" | "software";
+  type: "threat_actor" | "malware" | "vulnerability" | "ttp" | "infrastructure" | "software" | "campaign" | "indicator" | "identity";
   confidence: number;
+  stix_type?: string;
   mitre_id?: string;
   context?: string;
+  propagated_confidence?: number;
 }
 
 export interface ThreatRelation {
@@ -26,6 +28,8 @@ export interface ThreatRelation {
   target: string;
   confidence: number;
   evidence?: string;
+  edge_type?: "relational" | "temporal" | "causal" | "inferred";
+  derived_from?: string;
 }
 
 export interface CausalLink {
@@ -35,6 +39,22 @@ export interface CausalLink {
   temporal_order: number;
   confidence: number;
   evidence?: string;
+  mitre_tactic?: string;
+}
+
+export interface GraphNative {
+  nodes: ThreatEntity[];
+  edges: ThreatRelation[];
+  subgraphs: { name: string; type: string; node_ids: string[] }[];
+  graph_metadata: {
+    node_count: number;
+    edge_count: number;
+    density: number;
+    narrative: string;
+    stix_compliance?: number;
+  };
+  graph_warnings: { type: string; detail: string; affected_items?: string[] }[];
+  reasoning_trace: string;
 }
 
 export interface PreprocessResult {
@@ -56,8 +76,12 @@ export interface ExtractionResult {
   };
   causality?: {
     causal_links: CausalLink[];
-    attack_timeline?: { order: number; event: string; timestamp_mentioned?: string }[];
+    attack_timeline?: { order: number; event: string; timestamp_mentioned?: string; certainty?: string }[];
+    kill_chain_mapping?: { tactic: string; technique_id?: string; technique_name?: string; events: string[] }[];
+    primary_attack_path?: string[];
   };
+  graph_native?: GraphNative;
+  extraction_method?: string;
   source_type: string;
   source_reliability: number;
   timestamp: string;
@@ -82,10 +106,16 @@ export interface AttributionResult {
   attributed_actor: string;
   confidence: number;
   credibility_score?: number;
-  evidence_chain: { evidence: string; weight: number; source_type?: string }[];
+  graph_topology?: {
+    hub_nodes: string[];
+    authority_nodes: string[];
+    bridge_nodes: string[];
+    graph_density: number;
+  };
+  evidence_chain: { evidence: string; weight: number; source_type?: string; graph_path?: string }[];
   attack_stages: { stage: string; technique?: string; detail: string; mitre_tactic?: string }[];
   causal_chain?: CausalLink[];
-  alternative_actors?: { actor: string; confidence: number; reason?: string }[];
+  alternative_actors?: { actor: string; confidence: number; reason?: string; path_weight?: number }[];
   reasoning_trace?: string;
 }
 
@@ -99,7 +129,7 @@ export async function preprocessText(text: string, sourceType: string = "auto"):
   return data;
 }
 
-/* ── Layer 2: LLM Extraction (NER + RE + Causality) ── */
+/* ── Layer 2: Graph-Native LLM Extraction ── */
 
 export async function extractThreats(
   text: string,
@@ -114,31 +144,46 @@ export async function extractThreats(
   return data;
 }
 
-/* ── Layer 3+4: Conflict Detection & Credibility ── */
+/* ── Layer 3+4: Graph-Integrated Conflict Detection ── */
 
 export async function detectConflicts(
   entities: ThreatEntity[],
   relations: ThreatRelation[],
   causalLinks: CausalLink[],
-  sourceReliability: number = 0.8
+  sourceReliability: number = 0.8,
+  graphNative?: GraphNative
 ): Promise<ConflictAnalysis> {
   const { data, error } = await supabase.functions.invoke("threat-conflicts", {
-    body: { entities, relations, causal_links: causalLinks, source_reliability: sourceReliability },
+    body: {
+      entities,
+      relations,
+      causal_links: causalLinks,
+      source_reliability: sourceReliability,
+      graph_native: graphNative,
+    },
   });
   if (error) throw new Error(`Conflict detection failed: ${error.message}`);
   return data;
 }
 
-/* ── Layer 4: Attribution & Inference ── */
+/* ── Layer 4: Graph-Aware Attribution & Inference ── */
 
 export async function performAttribution(
   query: string,
   entities: ThreatEntity[],
   relations: ThreatRelation[],
-  causalLinks: CausalLink[]
+  causalLinks: CausalLink[],
+  graphNative?: GraphNative
 ): Promise<AttributionResult> {
   const { data, error } = await supabase.functions.invoke("threat-kg-query", {
-    body: { query, entities, relations, causal_links: causalLinks, mode: "attribute" },
+    body: {
+      query,
+      entities,
+      relations,
+      causal_links: causalLinks,
+      graph_native: graphNative,
+      mode: "attribute",
+    },
   });
   if (error) throw new Error(`Attribution failed: ${error.message}`);
   return data;
@@ -147,16 +192,23 @@ export async function performAttribution(
 export async function reconstructAttackPath(
   entities: ThreatEntity[],
   relations: ThreatRelation[],
-  causalLinks: CausalLink[]
+  causalLinks: CausalLink[],
+  graphNative?: GraphNative
 ): Promise<{ attack_path: string }> {
   const { data, error } = await supabase.functions.invoke("threat-kg-query", {
-    body: { entities, relations, causal_links: causalLinks, mode: "attack_path" },
+    body: {
+      entities,
+      relations,
+      causal_links: causalLinks,
+      graph_native: graphNative,
+      mode: "attack_path",
+    },
   });
   if (error) throw new Error(`Attack path reconstruction failed: ${error.message}`);
   return data;
 }
 
-/* ── Full Pipeline: Preprocess → Extract → Conflicts → Attribute ── */
+/* ── Full Pipeline: Preprocess → Graph-Native Extract → Conflicts → Attribute ── */
 
 export async function runFullPipeline(
   rawText: string,
@@ -171,7 +223,7 @@ export async function runFullPipeline(
   // Layer 1: Preprocess
   const preprocessing = await preprocessText(rawText, sourceType);
 
-  // Layer 2: Extract (NER + RE + Causality)
+  // Layer 2: Graph-Native Extraction (KG built WITHIN LLM reasoning)
   const extraction = await extractThreats(
     preprocessing.cleaned_text,
     "full",
@@ -179,16 +231,22 @@ export async function runFullPipeline(
     preprocessing.reliability_score
   );
 
-  // Gather extracted data
+  // Gather extracted data — including graph_native structure
   const entities = extraction.ner?.entities || [];
   const relations = extraction.re?.relations || [];
   const causalLinks = extraction.causality?.causal_links || [];
+  const graphNative = extraction.graph_native;
 
-  // Layer 3+4: Conflict detection
-  const conflicts = await detectConflicts(entities, relations, causalLinks, preprocessing.reliability_score);
+  // Layer 3+4: Graph-Integrated Conflict Detection
+  const conflicts = await detectConflicts(
+    entities, relations, causalLinks,
+    preprocessing.reliability_score, graphNative
+  );
 
-  // Layer 4: Attribution reasoning
-  const attribution = await performAttribution(query, entities, relations, causalLinks);
+  // Layer 4: Graph-Aware Attribution
+  const attribution = await performAttribution(
+    query, entities, relations, causalLinks, graphNative
+  );
 
   return { preprocessing, extraction, conflicts, attribution };
 }
