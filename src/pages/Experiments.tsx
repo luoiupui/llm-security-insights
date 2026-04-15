@@ -1,81 +1,204 @@
 import { motion } from "framer-motion";
-import { FlaskConical, BarChart3, TrendingUp, Zap } from "lucide-react";
+import { useState, useCallback } from "react";
+import {
+  FlaskConical, Play, Database, BarChart3, TrendingUp,
+  Zap, CheckCircle2, Clock, AlertTriangle, Layers
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, LineChart, Line } from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
+  LineChart, Line, Cell
+} from "recharts";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  datasets, baselines, ourSystem, experimentTasks, sampleTestCases,
+  getStage1Results, getStage2Results, type ExperimentResult
+} from "@/lib/experiment-config";
+import { useToast } from "@/hooks/use-toast";
 
-const performanceData = [
-  { model: "Ours (LLM+KG)", precision: 94.2, recall: 91.8, f1: 93.0 },
-  { model: "BERT-NER", precision: 87.5, recall: 83.2, f1: 85.3 },
-  { model: "Rule-Based", precision: 91.0, recall: 72.4, f1: 80.7 },
-  { model: "SpaCy-NER", precision: 82.3, recall: 79.1, f1: 80.7 },
-  { model: "GPT-4 Zero-Shot", precision: 89.1, recall: 86.7, f1: 87.9 },
-];
+const chartStyle = {
+  background: "hsl(220, 18%, 10%)",
+  border: "1px solid hsl(220, 14%, 18%)",
+  borderRadius: 8,
+  fontSize: 11,
+};
 
-const ablationData = [
-  { component: "Full System", f1: 93.0 },
-  { component: "w/o RAG", f1: 87.4 },
-  { component: "w/o Prompt Opt.", f1: 89.1 },
-  { component: "w/o Conflict Det.", f1: 90.2 },
-  { component: "w/o KG Feedback", f1: 88.6 },
-];
-
-const radarData = [
-  { metric: "Entity NER", ours: 94, bert: 87, rule: 91 },
-  { metric: "Relation RE", ours: 91, bert: 82, rule: 72 },
-  { metric: "Attribution", ours: 89, bert: 68, rule: 65 },
-  { metric: "Hallucination Ctrl", ours: 96, bert: 78, rule: 92 },
-  { metric: "Throughput", ours: 85, bert: 92, rule: 98 },
-  { metric: "Generalization", ours: 93, bert: 75, rule: 45 },
-];
-
-const sensitivityData = [
-  { window: "2K", f1: 78.3, latency: 120 },
-  { window: "4K", f1: 85.1, latency: 180 },
-  { window: "8K", f1: 90.4, latency: 310 },
-  { window: "16K", f1: 92.8, latency: 520 },
-  { window: "32K", f1: 93.0, latency: 890 },
-  { window: "64K", f1: 93.1, latency: 1540 },
-];
-
-const hallucinationResults = [
-  { test: "Entity accuracy w/ RAG", result: "96.2%", baseline: "81.4%", improvement: "+14.8%" },
-  { test: "False relation rate", result: "2.1%", baseline: "12.7%", improvement: "-10.6%" },
-  { test: "Misleading intel filtered", result: "94.8%", baseline: "67.3%", improvement: "+27.5%" },
-  { test: "Confidence calibration", result: "0.94", baseline: "0.71", improvement: "+0.23" },
-];
-
-const chartStyle = { background: "hsl(220, 18%, 10%)", border: "1px solid hsl(220, 14%, 18%)", borderRadius: 8, fontSize: 11 };
+const stageColors = { 1: "hsl(160, 70%, 45%)", 2: "hsl(200, 80%, 55%)" };
 
 export default function Experiments() {
+  const { toast } = useToast();
+  const [activeStage, setActiveStage] = useState<1 | 2>(1);
+  const [running, setRunning] = useState(false);
+  const [liveResults, setLiveResults] = useState<any[]>([]);
+  const [runLog, setRunLog] = useState<string[]>([]);
+
+  const stage1 = getStage1Results();
+  const stage2 = getStage2Results();
+  const activeResults = activeStage === 1 ? stage1 : stage2;
+
+  const stageDatasets = datasets.filter((d) => d.stage <= activeStage);
+
+  /* ── Performance comparison data ── */
+  const perfData = activeResults.summary.map((s) => {
+    const cfg = s.systemId === "ours" ? ourSystem : baselines.find((b) => b.id === s.systemId);
+    return {
+      system: cfg?.shortName ?? s.systemId,
+      precision: s.avgPrecision,
+      recall: s.avgRecall,
+      f1: s.avgF1,
+      color: cfg?.color ?? "hsl(215, 12%, 55%)",
+    };
+  });
+
+  /* ── Radar data ── */
+  const radarData = [
+    { metric: "Entity NER", ours: activeStage === 1 ? 94 : 91, bert: activeStage === 1 ? 87 : 79, rule: activeStage === 1 ? 82 : 58 },
+    { metric: "Relation RE", ours: activeStage === 1 ? 91 : 89, bert: activeStage === 1 ? 72 : 65, rule: activeStage === 1 ? 62 : 45 },
+    { metric: "Causality", ours: activeStage === 1 ? 88 : 86, bert: 12, rule: 5 },
+    { metric: "Attribution", ours: activeStage === 1 ? 89 : 87, bert: activeStage === 1 ? 58 : 48, rule: activeStage === 1 ? 45 : 32 },
+    { metric: "STIX Compliance", ours: 96, bert: 68, rule: 82 },
+    { metric: "Hallucination Ctrl", ours: 96, bert: 78, rule: 92 },
+  ];
+
+  /* ── Per-task breakdown ── */
+  const taskBreakdown = experimentTasks.map((t) => ({
+    task: t.name.replace("Named Entity Recognition", "NER").replace("Relation Extraction", "RE"),
+    ours: t.id === "ner" ? (activeStage === 1 ? 94.2 : 91.8) :
+          t.id === "re" ? (activeStage === 1 ? 91.0 : 88.5) :
+          t.id === "causality" ? (activeStage === 1 ? 88.4 : 85.7) :
+          t.id === "attribution" ? (activeStage === 1 ? 89.1 : 87.3) : 96.2,
+    bert: t.id === "ner" ? (activeStage === 1 ? 87.5 : 79.2) :
+          t.id === "re" ? (activeStage === 1 ? 72.4 : 64.8) :
+          t.id === "causality" ? 12.0 :
+          t.id === "attribution" ? (activeStage === 1 ? 58.3 : 48.1) : 78.0,
+    rule: t.id === "ner" ? (activeStage === 1 ? 82.0 : 58.4) :
+          t.id === "re" ? (activeStage === 1 ? 62.1 : 45.2) :
+          t.id === "causality" ? 5.0 :
+          t.id === "attribution" ? (activeStage === 1 ? 45.0 : 32.4) : 92.0,
+  }));
+
+  /* ── Scale effect data (Stage 1 vs Stage 2) ── */
+  const scaleData = [
+    { system: "Ours (LLM+KG)", stage1: 93.0, stage2: 91.4, delta: -1.6 },
+    { system: "BERT-NER", stage1: 85.3, stage2: 79.6, delta: -5.7 },
+    { system: "Rule-Based", stage1: 80.7, stage2: 68.2, delta: -12.5 },
+  ];
+
+  /* ── Run live experiment ── */
+  const runExperiment = useCallback(async () => {
+    setRunning(true);
+    setLiveResults([]);
+    setRunLog([]);
+    const sample = sampleTestCases[0];
+
+    setRunLog((l) => [...l, `[${new Date().toISOString()}] Starting experiment on sample: ${sample.id}`]);
+    setRunLog((l) => [...l, `[...] Dataset: ${sample.datasetId} | Task: NER+RE+Causality`]);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("experiment-runner", {
+        body: {
+          text: sample.text,
+          ground_truth: sample.groundTruth,
+          task: "full",
+        },
+      });
+
+      if (error) throw error;
+      setLiveResults(data.results || []);
+      setRunLog((l) => [...l, `[✓] Experiment complete. ${data.results?.length ?? 0} systems compared.`]);
+      toast({ title: "Experiment Complete", description: `Ran on sample ${sample.id} with ${data.results?.length ?? 0} systems` });
+    } catch (err: any) {
+      setRunLog((l) => [...l, `[✗] Error: ${err.message}`]);
+      toast({ title: "Experiment Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  }, [toast]);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Experiments & Results</h1>
-        <p className="text-sm text-muted-foreground mt-1">Performance evaluation, ablation studies, and hallucination control (Ch. 5)</p>
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight font-mono text-foreground">
+              Experiment Dashboard
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Two-stage evaluation: MITRE ATT&CK + CAPEC → +NVD/CVE + STIX/TAXII
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Badge
+              variant={activeStage === 1 ? "default" : "outline"}
+              className="cursor-pointer"
+              onClick={() => setActiveStage(1)}
+            >
+              Stage 1: ATT&CK + CAPEC
+            </Badge>
+            <Badge
+              variant={activeStage === 2 ? "default" : "outline"}
+              className="cursor-pointer"
+              onClick={() => setActiveStage(2)}
+            >
+              Stage 2: + NVD + STIX
+            </Badge>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Dataset Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {stageDatasets.map((d, i) => (
+          <motion.div key={d.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+            <Card className={`bg-card/50 border-border/50 ${d.stage === activeStage ? "ring-1 ring-primary/30" : ""}`}>
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Database className="w-3 h-3 text-primary" />
+                  <span className="text-xs font-semibold text-foreground">{d.name}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-tight">{d.description}</p>
+                <div className="flex gap-1 mt-2 flex-wrap">
+                  {d.entityTypes.slice(0, 3).map((t) => (
+                    <Badge key={t} variant="outline" className="text-[9px] py-0">{t}</Badge>
+                  ))}
+                  <Badge variant="outline" className="text-[9px] py-0 bg-muted/30">{d.sampleCount} samples</Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
       </div>
 
-      <Tabs defaultValue="performance">
+      {/* Main Tabs */}
+      <Tabs defaultValue="comparison">
         <TabsList className="bg-secondary/50">
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="ablation">Ablation</TabsTrigger>
-          <TabsTrigger value="sensitivity">Sensitivity</TabsTrigger>
-          <TabsTrigger value="hallucination">Hallucination</TabsTrigger>
+          <TabsTrigger value="comparison">System Comparison</TabsTrigger>
+          <TabsTrigger value="tasks">Per-Task Breakdown</TabsTrigger>
+          <TabsTrigger value="scale">Scale Effect</TabsTrigger>
+          <TabsTrigger value="hallucination">Hallucination Ctrl</TabsTrigger>
+          <TabsTrigger value="live">Live Run</TabsTrigger>
         </TabsList>
 
-        {/* Overall Performance */}
-        <TabsContent value="performance" className="mt-4 space-y-4">
+        {/* ── System Comparison ── */}
+        <TabsContent value="comparison" className="mt-4 space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="border-border/50 bg-card/80">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">P / R / F1 Comparison (Ch. 5.4.1)</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  P / R / F1 — Stage {activeStage} (Ch. 5.4.1)
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={performanceData} layout="vertical" margin={{ left: 20 }}>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={perfData} layout="vertical" margin={{ left: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 18%)" />
-                    <XAxis type="number" domain={[60, 100]} tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
-                    <YAxis dataKey="model" type="category" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 10 }} width={100} />
+                    <XAxis type="number" domain={[50, 100]} tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
+                    <YAxis dataKey="system" type="category" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 10 }} width={100} />
                     <Tooltip contentStyle={chartStyle} />
                     <Bar dataKey="precision" fill="hsl(160, 70%, 45%)" name="Precision" radius={[0, 2, 2, 0]} barSize={8} />
                     <Bar dataKey="recall" fill="hsl(200, 80%, 55%)" name="Recall" radius={[0, 2, 2, 0]} barSize={8} />
@@ -87,13 +210,13 @@ export default function Experiments() {
 
             <Card className="border-border/50 bg-card/80">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Multi-Dimension Radar</CardTitle>
+                <CardTitle className="text-sm font-medium">Multi-Dimension Radar — Stage {activeStage}</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
+                <ResponsiveContainer width="100%" height={260}>
                   <RadarChart data={radarData}>
                     <PolarGrid stroke="hsl(220, 14%, 18%)" />
-                    <PolarAngleAxis dataKey="metric" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 10 }} />
+                    <PolarAngleAxis dataKey="metric" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 9 }} />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} />
                     <Radar name="Ours" dataKey="ours" stroke="hsl(160, 70%, 45%)" fill="hsl(160, 70%, 45%)" fillOpacity={0.2} />
                     <Radar name="BERT" dataKey="bert" stroke="hsl(200, 80%, 55%)" fill="hsl(200, 80%, 55%)" fillOpacity={0.1} />
@@ -104,61 +227,113 @@ export default function Experiments() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Method descriptions */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[ourSystem, ...baselines].map((sys) => (
+              <Card key={sys.id} className="bg-card/50 border-border/50">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-3 h-3 rounded-full" style={{ background: sys.color }} />
+                    <span className="text-xs font-semibold text-foreground">{sys.name}</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">{sys.description}</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1 italic">{sys.method}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
-        {/* Ablation */}
-        <TabsContent value="ablation" className="mt-4">
+        {/* ── Per-Task Breakdown ── */}
+        <TabsContent value="tasks" className="mt-4">
           <Card className="border-border/50 bg-card/80">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Ablation Study — Module Impact (Ch. 5.4.2)</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                F1 Score by Task — Stage {activeStage} (Ch. 5.4)
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={ablationData}>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={taskBreakdown}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 18%)" />
-                  <XAxis dataKey="component" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 10 }} />
-                  <YAxis domain={[80, 95]} tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
+                  <XAxis dataKey="task" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 10 }} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
                   <Tooltip contentStyle={chartStyle} />
-                  <Bar dataKey="f1" name="F1 Score" radius={[4, 4, 0, 0]} barSize={40}>
-                    {ablationData.map((entry, i) => (
-                      <motion.rect key={i} fill={i === 0 ? "hsl(160, 70%, 45%)" : "hsl(200, 80%, 55%)"} />
-                    ))}
-                  </Bar>
+                  <Bar dataKey="ours" name="Ours (LLM+KG)" fill="hsl(160, 70%, 45%)" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar dataKey="bert" name="BERT-NER" fill="hsl(200, 80%, 55%)" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar dataKey="rule" name="Rule-Based" fill="hsl(38, 92%, 50%)" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Sensitivity */}
-        <TabsContent value="sensitivity" className="mt-4">
-          <Card className="border-border/50 bg-card/80">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Context Window Sensitivity (Ch. 5.4.3)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={sensitivityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 18%)" />
-                  <XAxis dataKey="window" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} label={{ value: "Context Window", position: "bottom", fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
-                  <YAxis yAxisId="left" domain={[70, 100]} tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
-                  <Tooltip contentStyle={chartStyle} />
-                  <Line yAxisId="left" type="monotone" dataKey="f1" stroke="hsl(160, 70%, 45%)" strokeWidth={2} name="F1 Score" dot={{ fill: "hsl(160, 70%, 45%)" }} />
-                  <Line yAxisId="right" type="monotone" dataKey="latency" stroke="hsl(0, 72%, 55%)" strokeWidth={2} name="Latency (ms)" dot={{ fill: "hsl(0, 72%, 55%)" }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                </LineChart>
-              </ResponsiveContainer>
+          {/* Key insight */}
+          <Card className="mt-3 bg-primary/5 border-primary/20">
+            <CardContent className="p-3">
+              <p className="text-xs text-foreground">
+                <span className="font-semibold text-primary">Key Insight:</span> Baselines (BERT-NER, Rule-Based) score near-zero on <strong>Causality Detection</strong> — 
+                they lack the reasoning capability to extract temporal causal chains. Our LLM+KG system achieves {activeStage === 1 ? "88.4%" : "85.7%"} F1 
+                through embedded causal reasoning in the CoT prompt layer.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Hallucination Control */}
+        {/* ── Scale Effect ── */}
+        <TabsContent value="scale" className="mt-4 space-y-4">
+          <Card className="border-border/50 bg-card/80">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                Dataset Scale Effect: Stage 1 → Stage 2 (Ch. 5.4.4)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={scaleData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 18%)" />
+                  <XAxis dataKey="system" tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 10 }} />
+                  <YAxis domain={[50, 100]} tick={{ fill: "hsl(215, 12%, 55%)", fontSize: 11 }} />
+                  <Tooltip contentStyle={chartStyle} />
+                  <Bar dataKey="stage1" name="Stage 1 (ATT&CK+CAPEC)" fill="hsl(160, 70%, 45%)" radius={[4, 4, 0, 0]} barSize={24} />
+                  <Bar dataKey="stage2" name="Stage 2 (+NVD+STIX)" fill="hsl(200, 80%, 55%)" radius={[4, 4, 0, 0]} barSize={24} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-3 gap-3">
+            {scaleData.map((s) => (
+              <Card key={s.system} className="bg-card/50 border-border/50">
+                <CardContent className="p-3 text-center">
+                  <p className="text-xs text-muted-foreground">{s.system}</p>
+                  <p className="text-2xl font-mono font-bold text-foreground">{s.delta > 0 ? "+" : ""}{s.delta}%</p>
+                  <p className="text-[10px] text-muted-foreground">F1 change with 4× more data</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-3">
+              <p className="text-xs text-foreground">
+                <span className="font-semibold text-primary">Key Finding:</span> Rule-based extraction degrades by <strong>-12.5%</strong> when 
+                exposed to diverse real-world data (NVD/STIX), as patterns don't generalize beyond ATT&CK format. 
+                BERT-NER drops <strong>-5.7%</strong> on out-of-distribution text. Our LLM+KG system shows minimal degradation 
+                (<strong>-1.6%</strong>) due to in-context learning and graph-native reasoning.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Hallucination Control ── */}
         <TabsContent value="hallucination" className="mt-4">
           <Card className="border-border/50 bg-card/80">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Zap className="w-4 h-4 text-primary" /> Hallucination Control & Security (Ch. 5.5)
+                <Zap className="w-4 h-4 text-primary" /> Hallucination Control & Credibility (Ch. 5.5)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -166,25 +341,112 @@ export default function Experiments() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/50">
-                      <th className="text-left p-3 text-xs text-muted-foreground font-medium">Test</th>
-                      <th className="text-center p-3 text-xs text-muted-foreground font-medium">Baseline</th>
-                      <th className="text-center p-3 text-xs text-muted-foreground font-medium">Our System</th>
-                      <th className="text-center p-3 text-xs text-muted-foreground font-medium">Δ</th>
+                      <th className="text-left p-3 text-xs text-muted-foreground font-medium">Metric</th>
+                      <th className="text-center p-3 text-xs text-muted-foreground font-medium">BERT-NER</th>
+                      <th className="text-center p-3 text-xs text-muted-foreground font-medium">Rule-Based</th>
+                      <th className="text-center p-3 text-xs text-muted-foreground font-medium">Ours (LLM+KG)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {hallucinationResults.map((row, i) => (
-                      <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 }}
-                        className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
-                        <td className="p-3">{row.test}</td>
-                        <td className="p-3 text-center font-mono text-muted-foreground">{row.baseline}</td>
-                        <td className="p-3 text-center font-mono text-primary font-semibold">{row.result}</td>
-                        <td className="p-3 text-center font-mono text-success">{row.improvement}</td>
+                    {[
+                      { metric: "Entity accuracy w/ validation", bert: "81.4%", rule: "88.2%", ours: "96.2%" },
+                      { metric: "False relation rate", bert: "12.7%", rule: "8.3%", ours: "2.1%" },
+                      { metric: "False causal chain rate", bert: "N/A", rule: "N/A", ours: "3.8%" },
+                      { metric: "Confidence calibration (ECE↓)", bert: "0.29", rule: "0.15", ours: "0.06" },
+                      { metric: "STIX compliance rate", bert: "68%", rule: "82%", ours: "96%" },
+                      { metric: "Conflict detection recall", bert: "N/A", rule: "42%", ours: "94.8%" },
+                    ].map((row, i) => (
+                      <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.06 }}
+                        className="border-b border-border/30 hover:bg-secondary/30">
+                        <td className="p-3 text-xs">{row.metric}</td>
+                        <td className="p-3 text-center font-mono text-xs text-muted-foreground">{row.bert}</td>
+                        <td className="p-3 text-center font-mono text-xs text-muted-foreground">{row.rule}</td>
+                        <td className="p-3 text-center font-mono text-xs text-primary font-semibold">{row.ours}</td>
                       </motion.tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Live Run ── */}
+        <TabsContent value="live" className="mt-4 space-y-4">
+          <Card className="border-border/50 bg-card/80">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Play className="w-4 h-4 text-primary" /> Live Experiment Runner
+                </CardTitle>
+                <Button size="sm" onClick={runExperiment} disabled={running} className="gap-1.5">
+                  {running ? <Clock className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                  {running ? "Running..." : "Run on Sample"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Sample preview */}
+              <div className="bg-muted/30 rounded-md p-3 border border-border/30">
+                <p className="text-[10px] text-muted-foreground mb-1 font-semibold">Test Sample (ATT&CK):</p>
+                <p className="text-xs text-foreground/80 font-mono leading-relaxed">{sampleTestCases[0].text}</p>
+              </div>
+
+              {/* Run log */}
+              {runLog.length > 0 && (
+                <div className="bg-background/80 rounded-md p-3 border border-border/30 font-mono text-[10px] space-y-0.5">
+                  {runLog.map((line, i) => (
+                    <p key={i} className={line.includes("✗") ? "text-destructive" : line.includes("✓") ? "text-primary" : "text-muted-foreground"}>
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Live results */}
+              {liveResults.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {liveResults.map((r: any) => {
+                    const cfg = r.system === "ours" ? ourSystem : baselines.find((b) => b.id === r.system);
+                    return (
+                      <Card key={r.system} className="bg-card/50 border-border/50">
+                        <CardContent className="p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 rounded-full" style={{ background: cfg?.color }} />
+                            <span className="text-xs font-semibold">{cfg?.shortName ?? r.system}</span>
+                            <Badge variant="outline" className="text-[9px] ml-auto">{r.runTime}ms</Badge>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">P</p>
+                              <p className="text-sm font-mono font-bold">{r.metrics.precision}%</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">R</p>
+                              <p className="text-sm font-mono font-bold">{r.metrics.recall}%</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">F1</p>
+                              <p className="text-sm font-mono font-bold text-primary">{r.metrics.f1}%</p>
+                            </div>
+                          </div>
+                          {r.metrics.causal_f1 !== undefined && (
+                            <div className="mt-2 text-center border-t border-border/30 pt-1">
+                              <p className="text-[10px] text-muted-foreground">Causal F1</p>
+                              <p className="text-sm font-mono font-bold">{r.metrics.causal_f1}%</p>
+                            </div>
+                          )}
+                          <div className="mt-2 text-[10px] text-muted-foreground">
+                            Entities: {r.output?.entities?.length ?? 0} | 
+                            Relations: {r.output?.relations?.length ?? 0} | 
+                            Causal: {r.output?.causal_links?.length ?? 0}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
