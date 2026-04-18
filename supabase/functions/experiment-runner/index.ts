@@ -183,8 +183,8 @@ function simulateRuleBased(text: string, groundTruth: any) {
 
 /* ── Metric Computation ── */
 function computeMetrics(predicted: any, groundTruth: any, task: string) {
-  const gtEntities = new Set((groundTruth.entities || []).map((e: any) => e.name.toLowerCase()));
-  const predEntities = new Set((predicted.entities || []).map((e: any) => e.name.toLowerCase()));
+  const gtEntities = new Set((groundTruth.entities || []).filter((e: any) => e?.name).map((e: any) => String(e.name).toLowerCase()));
+  const predEntities = new Set((predicted.entities || []).filter((e: any) => e?.name).map((e: any) => String(e.name).toLowerCase()));
 
   const tp = [...predEntities].filter((e) => gtEntities.has(e)).length;
   const precision = predEntities.size > 0 ? tp / predEntities.size : 0;
@@ -192,8 +192,10 @@ function computeMetrics(predicted: any, groundTruth: any, task: string) {
   const f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0;
 
   // Relation metrics
-  const gtRels = new Set((groundTruth.relations || []).map((r: any) => `${r.source}→${r.relation}→${r.target}`.toLowerCase()));
-  const predRels = new Set((predicted.relations || []).map((r: any) => `${r.source}→${r.relation}→${r.target}`.toLowerCase()));
+  const relKey = (r: any) =>
+    `${r?.source ?? ""}→${r?.relation ?? r?.predicate ?? ""}→${r?.target ?? ""}`.toLowerCase();
+  const gtRels = new Set((groundTruth.relations || []).filter((r: any) => r && (r.source || r.target)).map(relKey));
+  const predRels = new Set((predicted.relations || []).filter((r: any) => r && (r.source || r.target)).map(relKey));
   const relTp = [...predRels].filter((r) => gtRels.has(r)).length;
   const relPrecision = predRels.size > 0 ? relTp / predRels.size : 0;
   const relRecall = gtRels.size > 0 ? relTp / gtRels.size : 0;
