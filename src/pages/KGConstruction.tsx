@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
 import { persistExtraction, type ThreatEntity, type ThreatRelation } from "@/lib/threat-pipeline";
 import { supabase } from "@/integrations/supabase/client";
+import { CorpusHealth } from "@/components/CorpusHealth";
 import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
