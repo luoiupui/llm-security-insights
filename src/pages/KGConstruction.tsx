@@ -174,6 +174,9 @@ export default function KGConstruction() {
         </CardContent>
       </Card>
 
+      {/* Live corpus health — polls every 3s while bootstrap runs, every 8s otherwise */}
+      <CorpusHealth pollIntervalMs={bootstrapping ? 3000 : 8000} />
+
       {/* Layer B+C: RAG context retrieved before extraction */}
       {pipeline.rag && (
         <Card className="border-border/50 bg-card/80">
