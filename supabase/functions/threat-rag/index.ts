@@ -19,30 +19,29 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1";
-const EMBED_MODEL = "google/text-embedding-004"; // 768-dim, gemini-aligned
+const canon = (s: string) => String(s ?? "").trim().toLowerCase();
 
-async function embed(text: string, apiKey: string): Promise<number[] | null> {
-  // Lovable AI gateway exposes OpenAI-style embeddings endpoint
-  try {
-    const r = await fetch(`${AI_GATEWAY}/embeddings`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: EMBED_MODEL, input: text.slice(0, 8000) }),
-    });
-    if (!r.ok) {
-      console.error("embed failed", r.status, await r.text());
-      return null;
-    }
-    const j = await r.json();
-    return j?.data?.[0]?.embedding ?? null;
-  } catch (e) {
-    console.error("embed error", e);
-    return null;
-  }
+// Deterministic lexical "embedding" — token set used for Jaccard similarity.
+// No external embedding model available in the gateway, so we use lexical RAG.
+const STOPWORDS = new Set(["the","a","an","and","or","of","to","in","on","for","with","by","is","are","was","were","be","been","as","at","this","that","it","from","has","have","had","will","can","may","not","but","if","then","than","also","such","via","using","used","into","over","under","about"]);
+
+function tokenize(text: string): Set<string> {
+  return new Set(
+    String(text ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s.-]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 2 && !STOPWORDS.has(t))
+  );
 }
 
-const canon = (s: string) => String(s ?? "").trim().toLowerCase();
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
