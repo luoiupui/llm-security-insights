@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Network, Tag, ArrowRight, Play, Loader2 } from "lucide-react";
+import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,22 @@ export default function KGConstruction() {
 
   const handleExtract = async () => {
     const pre = await pipeline.runPreprocess(inputText);
-    if (pre) await pipeline.runExtraction(pre.cleaned_text, "full", pre.source_type, pre.reliability_score);
+    if (!pre) return;
+    // Layer B+C: Vector RAG + GraphRAG retrieval
+    const rag = await pipeline.runRetrieval(pre.cleaned_text, 3);
+    // Layer 2: extraction grounded with retrieved context
+    const ext = await pipeline.runExtraction(
+      pre.cleaned_text, "full", pre.source_type, pre.reliability_score,
+      rag?.context_block ?? "",
+    );
+    // Layer A: deterministic KB grounding (MITRE/CVE/STIX)
+    if (ext) {
+      await pipeline.runKBValidation(
+        ext.ner?.entities || [],
+        ext.re?.relations || [],
+        ext.causality?.causal_links || [],
+      );
+    }
   };
 
   const entities: ThreatEntity[] = pipeline.extraction?.ner?.entities || [];
@@ -96,7 +111,82 @@ export default function KGConstruction() {
         </CardContent>
       </Card>
 
-      {/* Graph Visualization */}
+      {/* Layer B+C: RAG context retrieved before extraction */}
+      {pipeline.rag && (
+        <Card className="border-border/50 bg-card/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Database className="w-4 h-4 text-info" />
+              Layer B + C — Retrieved Context (Vector RAG + GraphRAG)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary" className="bg-info/15 text-info">
+                {pipeline.rag.similar_reports.length} similar prior reports
+              </Badge>
+              <Badge variant="secondary" className="bg-primary/15 text-primary">
+                {pipeline.rag.subgraph.entities.length} prior entities
+              </Badge>
+              <Badge variant="secondary" className="bg-primary/15 text-primary">
+                {pipeline.rag.subgraph.relations.length} prior relations
+              </Badge>
+              <Badge variant="outline" className="text-[10px]">
+                embedding: {pipeline.rag.embedding_used ? "text-embedding-004" : "none"}
+              </Badge>
+            </div>
+            {pipeline.rag.context_block ? (
+              <pre className="p-2 rounded bg-secondary/40 max-h-40 overflow-auto font-mono text-[10px] whitespace-pre-wrap">
+                {pipeline.rag.context_block}
+              </pre>
+            ) : (
+              <p className="text-muted-foreground">No prior history matched — extraction runs ungrounded for this event (cold-start).</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Layer A: KB grounding result */}
+      {pipeline.kbValidation && (
+        <Card className="border-border/50 bg-card/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-threat-low" />
+              Layer A — Authoritative KB Grounding (MITRE / CVE / STIX)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary" className="bg-threat-low/15 text-threat-low">
+                {pipeline.kbValidation.summary.ok}/{pipeline.kbValidation.summary.total_checks} verified
+                ({(pipeline.kbValidation.accuracy * 100).toFixed(0)}%)
+              </Badge>
+              {pipeline.kbValidation.summary.hallucinated > 0 && (
+                <Badge variant="secondary" className="bg-threat-critical/15 text-threat-critical gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  {pipeline.kbValidation.summary.hallucinated} hallucinated
+                </Badge>
+              )}
+              {pipeline.kbValidation.summary.malformed > 0 && (
+                <Badge variant="secondary" className="bg-threat-high/15 text-threat-high">
+                  {pipeline.kbValidation.summary.malformed} malformed
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[10px]">KB size: {pipeline.kbValidation.kb_size}</Badge>
+            </div>
+            {pipeline.kbValidation.findings.filter(f => f.kind !== "ok").slice(0, 6).map((f, i) => (
+              <div key={i} className="p-2 rounded bg-secondary/30 flex items-start gap-2">
+                <AlertTriangle className="w-3 h-3 text-threat-high mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <span className="font-mono">{f.raw_value}</span>
+                  <span className="text-muted-foreground"> — {f.kind} ({f.id_type})</span>
+                  {f.suggestion && <span className="text-muted-foreground"> · suggest: <span className="font-mono">{f.suggestion}</span></span>}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
       {graphData.nodes.length > 0 && (
         <Card className="border-border/50 bg-card/80">
           <CardHeader className="pb-2">

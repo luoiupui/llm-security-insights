@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { repoInventory, LLM_CALL_SITES, getRepoStats, type RepoFile } from "@/lib/github-sync";
 import { SelfMonitoringPanel } from "@/components/SelfMonitoringPanel";
+import { MonitoringEvents } from "@/components/MonitoringEvents";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -164,6 +165,9 @@ export default function GitHubSync() {
           </CardContent>
         )}
       </Card>
+
+      {/* Live timestamped events from KB validation, RAG retrieval, KG persistence, baselines */}
+      <MonitoringEvents limit={12} title="Live Pipeline Events (KB · RAG · GraphRAG · Baselines)" />
 
       {/* ── LLM call-site table ────────────────────────────────── */}
       <Card className="bg-card/50 border-border/50">
