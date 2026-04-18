@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
 import { persistExtraction, type ThreatEntity, type ThreatRelation } from "@/lib/threat-pipeline";
 import { supabase } from "@/integrations/supabase/client";
+import { CorpusHealth } from "@/components/CorpusHealth";
 import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
@@ -172,6 +173,9 @@ export default function KGConstruction() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Live corpus health — polls every 3s while bootstrap runs, every 8s otherwise */}
+      <CorpusHealth pollIntervalMs={bootstrapping ? 3000 : 8000} />
 
       {/* Layer B+C: RAG context retrieved before extraction */}
       {pipeline.rag && (
