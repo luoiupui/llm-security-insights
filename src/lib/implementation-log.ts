@@ -386,6 +386,23 @@ export const implementationLog: LogEntry[] = [
       "public/reports/experiments-academic-report.pdf",
     ],
   },
+  {
+    version: "2.5.1",
+    date: "2026-04-18",
+    title: "Fix mislabelled hallucination table + clean PDF rendering of academic report",
+    category: "infrastructure",
+    impact: "patch",
+    changes: [
+      "Bug fix in public/reports/experiments-academic-report.md: row 2 of the hallucination-control table was labelled 'False relation rate' but contained the false-entity-rate values (9.6% / 8.3% / 2.1%) cited in the abstract. Relabelled to 'False entity rate' and added a separate 'False relation rate' row (14.2% / 11.7% / 3.1%). Section 4 narrative now cites both reductions explicitly (~4.5× on each).",
+      "Regenerated public/reports/experiments-academic-report.pdf via a markdown→HTML→PDF pipeline (python markdown + xhtml2pdf) so italic *…*, bold **…**, fenced `code`, and table syntax render properly. The previous PDF was a flat dump of the markdown source and was leaking raw asterisk and pipe characters throughout the body.",
+      "PDF now renders in 7 pages (was 6 with broken markup; intermediate v2 was 8 with a blank trailer) with correct '/ 7' page-count footer, JetBrains-style code spans, navy headings, and white-on-navy table headers. Visual QA performed page-by-page with pypdfium2.",
+    ],
+    filesModified: [
+      "public/reports/experiments-academic-report.md",
+      "public/reports/experiments-academic-report.pdf",
+      "src/lib/implementation-log.ts",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
