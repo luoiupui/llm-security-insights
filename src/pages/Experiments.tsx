@@ -850,6 +850,211 @@ export default function Experiments() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ── System Test (Full 6-Layer Acceptance Test) ── */}
+        <TabsContent value="systest" className="mt-4 space-y-4">
+          <Card className="border-warning/30 bg-warning/5">
+            <CardContent className="p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
+              <div className="text-[11px] text-foreground/90 leading-relaxed">
+                <strong className="text-warning">SYSTEM TEST / ACCEPTANCE TEST — NOT AN EVALUATION.</strong>{" "}
+                Each case is chained through all 6 pipeline layers
+                (<code>preprocess → rag → extract → kb-validate → conflicts → attribution</code>) with
+                explicit pass criteria per layer. A case PASSES only when every layer passes its threshold.
+                Results are logged to <code>monitoring_events</code> as <code>system_test_run</code>.
+                For thesis-grade numbers, expand corpus to n≥100 and average over 3 trials.
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 bg-card/80">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Workflow className="w-4 h-4 text-primary" /> Full 6-Layer System Test
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    {([5, 10, 30] as const).map((n) => (
+                      <Badge
+                        key={n}
+                        variant={sysTestSize === n ? "default" : "outline"}
+                        className="cursor-pointer text-[10px]"
+                        onClick={() => !sysTestRunning && setSysTestSize(n)}
+                      >
+                        n={n}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button size="sm" onClick={runFullSystemTest} disabled={sysTestRunning} className="gap-1.5">
+                    {sysTestRunning ? <Clock className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                    {sysTestRunning
+                      ? `Running ${sysTestProgress.done}/${sysTestProgress.total}…`
+                      : `Run System Test (n=${sysTestSize})`}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Layer pipeline diagram */}
+              <div className="flex items-center justify-between gap-1 bg-muted/20 p-2 rounded border border-border/30 overflow-x-auto">
+                {SYSTEM_TEST_LAYERS.map((layer, i) => {
+                  const isActive = sysTestProgress.layer === layer && sysTestRunning;
+                  const passCount = sysTestResults?.perLayerPass?.[layer] ?? 0;
+                  const total = sysTestResults?.n ?? 0;
+                  return (
+                    <div key={layer} className="flex items-center gap-1 flex-shrink-0">
+                      <div
+                        className={`px-2 py-1 rounded text-[10px] font-mono font-semibold border ${
+                          isActive
+                            ? "bg-primary/30 border-primary text-primary animate-pulse"
+                            : sysTestResults
+                            ? passCount === total
+                              ? "bg-primary/10 border-primary/40 text-primary"
+                              : "bg-destructive/10 border-destructive/40 text-destructive"
+                            : "bg-card border-border/50 text-muted-foreground"
+                        }`}
+                      >
+                        L{i + 1} {layer}
+                        {sysTestResults && ` ${passCount}/${total}`}
+                      </div>
+                      {i < SYSTEM_TEST_LAYERS.length - 1 && <span className="text-muted-foreground/40">→</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {sysTestRunning && (
+                <div className="bg-background/80 rounded-md p-2 border border-border/30 text-[10px] font-mono">
+                  Case <span className="text-primary">{sysTestProgress.current}</span> · layer{" "}
+                  <span className="text-primary">{sysTestProgress.layer}</span> ·{" "}
+                  {sysTestProgress.done}/{sysTestProgress.total}
+                  <div className="w-full h-1 bg-muted/40 rounded mt-1 overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${(sysTestProgress.done / Math.max(sysTestProgress.total, 1)) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {sysTestResults && (
+                <>
+                  {/* Headline scorecard */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <Card className="bg-primary/10 border-primary/30">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Overall pass rate</p>
+                        <p className="text-lg font-mono font-bold text-primary">{sysTestResults.passRate}%</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Cases (n)</p>
+                        <p className="text-lg font-mono font-bold">{sysTestResults.n}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Total time</p>
+                        <p className="text-lg font-mono font-bold">{(sysTestResults.totalMs / 1000).toFixed(1)}s</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Confidence</p>
+                        <p className="text-[10px] font-mono font-bold text-warning mt-1">
+                          {sysTestResults.confidence_band}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Per-layer aggregate */}
+                  <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs font-semibold">Per-layer pass rate · avg latency</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                        {SYSTEM_TEST_LAYERS.map((layer) => {
+                          const passed = sysTestResults.perLayerPass[layer];
+                          const total = sysTestResults.n;
+                          const pct = ((passed / total) * 100).toFixed(0);
+                          const ms = sysTestResults.perLayerAvgMs[layer];
+                          return (
+                            <div key={layer} className="bg-muted/20 p-2 rounded border border-border/30 text-center">
+                              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{layer}</p>
+                              <p className={`text-sm font-mono font-bold ${passed === total ? "text-primary" : "text-destructive"}`}>
+                                {passed}/{total}
+                              </p>
+                              <p className="text-[9px] text-muted-foreground">{pct}% · {ms}ms</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Per-case scorecard */}
+                  <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs font-semibold">Per-case × per-layer scorecard</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                        <table className="w-full text-[10px] font-mono">
+                          <thead className="sticky top-0 bg-card">
+                            <tr className="border-b border-border/50 text-muted-foreground">
+                              <th className="text-left p-1">Case</th>
+                              {SYSTEM_TEST_LAYERS.map((l) => (
+                                <th key={l} className="text-center p-1 capitalize">{l.slice(0, 6)}</th>
+                              ))}
+                              <th className="text-center p-1">Overall</th>
+                              <th className="text-center p-1">ms</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sysTestResults.cases.map((c) => (
+                              <tr key={c.caseId} className="border-b border-border/20">
+                                <td className="p-1 text-foreground" title={c.source}>{c.caseId}</td>
+                                {SYSTEM_TEST_LAYERS.map((l) => {
+                                  const lo = c.layers.find((x) => x.layer === l);
+                                  const Icon =
+                                    lo?.status === "pass" ? CheckCircle2 :
+                                    lo?.status === "fail" ? XCircle :
+                                    lo?.status === "skip" ? MinusCircle : AlertTriangle;
+                                  const color =
+                                    lo?.status === "pass" ? "text-primary" :
+                                    lo?.status === "fail" ? "text-destructive" :
+                                    lo?.status === "skip" ? "text-muted-foreground" : "text-warning";
+                                  return (
+                                    <td key={l} className="p-1 text-center" title={lo?.detail ?? ""}>
+                                      <Icon className={`w-3 h-3 inline ${color}`} />
+                                    </td>
+                                  );
+                                })}
+                                <td className={`p-1 text-center font-bold ${
+                                  c.overall === "pass" ? "text-primary" :
+                                  c.overall === "fail" ? "text-destructive" : "text-warning"
+                                }`}>{c.overall}</td>
+                                <td className="p-1 text-center text-muted-foreground">{c.totalMs}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-2">
+                        Hover any cell to see the layer's detail string (counts, hallucination rate,
+                        rules-passed, path weight). Skip = upstream layer failed.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
