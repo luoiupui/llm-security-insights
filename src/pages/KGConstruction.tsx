@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Network, Tag, ArrowRight, Play, Loader2 } from "lucide-react";
+import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,22 @@ export default function KGConstruction() {
 
   const handleExtract = async () => {
     const pre = await pipeline.runPreprocess(inputText);
-    if (pre) await pipeline.runExtraction(pre.cleaned_text, "full", pre.source_type, pre.reliability_score);
+    if (!pre) return;
+    // Layer B+C: Vector RAG + GraphRAG retrieval
+    const rag = await pipeline.runRetrieval(pre.cleaned_text, 3);
+    // Layer 2: extraction grounded with retrieved context
+    const ext = await pipeline.runExtraction(
+      pre.cleaned_text, "full", pre.source_type, pre.reliability_score,
+      rag?.context_block ?? "",
+    );
+    // Layer A: deterministic KB grounding (MITRE/CVE/STIX)
+    if (ext) {
+      await pipeline.runKBValidation(
+        ext.ner?.entities || [],
+        ext.re?.relations || [],
+        ext.causality?.causal_links || [],
+      );
+    }
   };
 
   const entities: ThreatEntity[] = pipeline.extraction?.ner?.entities || [];
