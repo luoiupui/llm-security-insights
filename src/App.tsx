@@ -12,6 +12,7 @@ import Experiments from "./pages/Experiments";
 import ThreatFeed from "./pages/ThreatFeed";
 import SettingsPage from "./pages/SettingsPage";
 import ImplementationLog from "./pages/ImplementationLog";
+import GitHubSync from "./pages/GitHubSync";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/experiments" element={<Experiments />} />
             <Route path="/threat-feed" element={<ThreatFeed />} />
             <Route path="/implementation-log" element={<ImplementationLog />} />
+            <Route path="/github-sync" element={<GitHubSync />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
