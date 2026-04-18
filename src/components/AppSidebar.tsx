@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Network, Brain, FlaskConical, Database,
-  Shield, Settings, ChevronLeft, ChevronRight, Cpu, FileText
+  Shield, Settings, ChevronLeft, ChevronRight, Cpu, FileText, Github
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -21,6 +21,7 @@ const mainItems = [
 const systemItems = [
   { title: "Threat Feed", url: "/threat-feed", icon: Shield },
   { title: "Impl. Log", url: "/implementation-log", icon: FileText },
+  { title: "GitHub Sync", url: "/github-sync", icon: Github },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
