@@ -54,26 +54,34 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const apiKey = Deno.env.get("LOVABLE_API_KEY")!;
 
     if (mode === "embed_and_retrieve") {
-      const { text, top_k = 3, similarity_threshold = 0.5 } = body;
+      const { text, top_k = 3, similarity_threshold = 0.1 } = body;
       if (!text) {
         return new Response(JSON.stringify({ error: "text required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const vec = await embed(text, apiKey);
-      let similar: any[] = [];
-      if (vec) {
-        const { data } = await supabase.rpc("match_threat_reports", {
-          query_embedding: vec as any,
-          match_count: top_k,
-          similarity_threshold,
-        });
-        similar = data ?? [];
-      }
+      // Lexical RAG: pull recent reports, score by Jaccard token overlap
+      const queryTokens = tokenize(text);
+      const { data: candidates } = await supabase
+        .from("threat_reports")
+        .select("id, summary, source_text, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      const scored = (candidates ?? [])
+        .map((r: any) => {
+          const corpus = `${r.summary ?? ""} ${r.source_text ?? ""}`;
+          const sim = jaccard(queryTokens, tokenize(corpus));
+          return { ...r, similarity: sim };
+        })
+        .filter((r: any) => r.similarity >= similarity_threshold)
+        .sort((a: any, b: any) => b.similarity - a.similarity)
+        .slice(0, top_k);
+
+      const similar = scored;
 
       // GraphRAG — pull neighbouring subgraph for matched reports' entities
       let subgraph: any = { entities: [], relations: [] };
@@ -86,23 +94,22 @@ serve(async (req) => {
         subgraph = { entities: ents ?? [], relations: rels ?? [] };
       }
 
-      // Build context block to inject into extraction prompt
       const contextBlock = buildContextBlock(similar, subgraph);
 
-      // Log monitoring event
       await supabase.from("monitoring_events").insert({
         event_type: "rag_retrieval",
         category: "retrieval",
-        title: `Vector RAG: retrieved ${similar.length} similar reports`,
+        title: `Lexical RAG: retrieved ${similar.length} similar reports`,
         detail: `GraphRAG: ${subgraph.entities.length} entities + ${subgraph.relations.length} relations from history`,
-        metadata: { top_k, similarity_threshold, similar_count: similar.length },
+        metadata: { top_k, similarity_threshold, similar_count: similar.length, method: "jaccard_lexical" },
       });
 
       return new Response(JSON.stringify({
         similar_reports: similar,
         subgraph,
         context_block: contextBlock,
-        embedding_used: !!vec,
+        embedding_used: false,
+        retrieval_method: "lexical_jaccard",
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
