@@ -53,152 +53,131 @@ serve(async (req) => {
   const supaUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+  // Parse + validate up front so we can return fast
+  let limit = 10;
+  let skipExisting = true;
   try {
     const body = await req.json().catch(() => ({}));
-    const limit = Math.min(Number(body.limit ?? 25), 100);
-    const skipExisting = body.skip_existing !== false;
+    limit = Math.min(Number(body.limit ?? 10), 50);
+    skipExisting = body.skip_existing !== false;
+  } catch {
+    /* ignore */
+  }
 
-    await supabase.from("monitoring_events").insert({
-      event_type: "cisa_bootstrap_start",
-      category: "ingest",
-      title: `CISA KEV bootstrap started (limit=${limit})`,
-      detail: "Pulling KEV catalog and running each entry through full pipeline",
-    });
+  // Background worker: runs after we've already responded.
+  const runIngest = async () => {
+    try {
+      await supabase.from("monitoring_events").insert({
+        event_type: "cisa_bootstrap_start",
+        category: "ingest",
+        title: `CISA KEV bootstrap started (limit=${limit})`,
+        detail: "Background worker pulling KEV catalog and running pipeline",
+      });
 
-    // 1. Fetch CISA KEV catalog (no auth needed, public JSON feed)
-    const r = await fetch(KEV_URL);
-    if (!r.ok) throw new Error(`KEV fetch failed: ${r.status}`);
-    const kev = await r.json();
-    const entries: KEVEntry[] = kev.vulnerabilities ?? [];
+      const r = await fetch(KEV_URL);
+      if (!r.ok) throw new Error(`KEV fetch failed: ${r.status}`);
+      const kev = await r.json();
+      const entries: KEVEntry[] = kev.vulnerabilities ?? [];
+      entries.sort((a, b) => (b.dateAdded ?? "").localeCompare(a.dateAdded ?? ""));
 
-    // Most recent first
-    entries.sort((a, b) => (b.dateAdded ?? "").localeCompare(a.dateAdded ?? ""));
-
-    // Optionally skip CVEs already in threat_reports (idempotent re-runs)
-    let toIngest = entries.slice(0, limit);
-    if (skipExisting) {
-      const cveIds = toIngest.map((e) => e.cveID);
-      const { data: existing } = await supabase
-        .from("threat_reports")
-        .select("source_text")
-        .ilike("source_text", "%CISA KEV Advisory%")
-        .limit(500);
-      const seen = new Set(
-        (existing ?? []).flatMap((r: any) => {
-          const m = String(r.source_text).match(/CVE-\d{4}-\d+/g);
-          return m ?? [];
-        }),
-      );
-      toIngest = toIngest.filter((e) => !seen.has(e.cveID));
-    }
-
-    let succeeded = 0;
-    let failed = 0;
-    const failures: string[] = [];
-
-    // 2. Process each entry through extract → validate → persist
-    for (const entry of toIngest) {
-      const sourceText = buildSyntheticReport(entry);
-      try {
-        // Extract via threat-extract (no RAG context — we're seeding)
-        const extractRes = await fetch(`${supaUrl}/functions/v1/threat-extract`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            text: sourceText,
-            mode: "full",
-            source_type: "cisa_kev",
-            reliability: 0.95,
-            rag_context: "",
+      let toIngest = entries.slice(0, limit);
+      if (skipExisting) {
+        const { data: existing } = await supabase
+          .from("threat_reports")
+          .select("source_text")
+          .ilike("source_text", "%CISA KEV Advisory%")
+          .limit(500);
+        const seen = new Set(
+          (existing ?? []).flatMap((row: any) => {
+            const m = String(row.source_text).match(/CVE-\d{4}-\d+/g);
+            return m ?? [];
           }),
-        });
-
-        if (!extractRes.ok) {
-          throw new Error(`extract ${extractRes.status}: ${await extractRes.text()}`);
-        }
-        const extraction = await extractRes.json();
-
-        // Persist into GraphRAG corpus
-        const persistRes = await fetch(`${supaUrl}/functions/v1/threat-rag`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            mode: "persist",
-            source_text: sourceText,
-            source_type: "cisa_kev",
-            extraction,
-          }),
-        });
-
-        if (!persistRes.ok) {
-          throw new Error(`persist ${persistRes.status}: ${await persistRes.text()}`);
-        }
-
-        succeeded++;
-      } catch (e) {
-        failed++;
-        const msg = `${entry.cveID}: ${e instanceof Error ? e.message : "unknown"}`;
-        failures.push(msg);
-        console.error("ingest failed:", msg);
+        );
+        toIngest = toIngest.filter((e) => !seen.has(e.cveID));
       }
 
-      // Small delay to avoid hammering the LLM gateway
-      await new Promise((res) => setTimeout(res, 250));
+      let succeeded = 0;
+      let failed = 0;
+      const failures: string[] = [];
+
+      for (const entry of toIngest) {
+        const sourceText = buildSyntheticReport(entry);
+        try {
+          const extractRes = await fetch(`${supaUrl}/functions/v1/threat-extract`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceKey}` },
+            body: JSON.stringify({
+              text: sourceText, mode: "full", source_type: "cisa_kev",
+              reliability: 0.95, rag_context: "",
+            }),
+          });
+          if (!extractRes.ok) throw new Error(`extract ${extractRes.status}`);
+          const extraction = await extractRes.json();
+
+          const persistRes = await fetch(`${supaUrl}/functions/v1/threat-rag`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceKey}` },
+            body: JSON.stringify({
+              mode: "persist", source_text: sourceText, source_type: "cisa_kev", extraction,
+            }),
+          });
+          if (!persistRes.ok) throw new Error(`persist ${persistRes.status}`);
+          succeeded++;
+
+          // Progress event every 3 advisories
+          if (succeeded % 3 === 0) {
+            await supabase.from("monitoring_events").insert({
+              event_type: "cisa_bootstrap_progress",
+              category: "ingest",
+              title: `Bootstrap progress: ${succeeded}/${toIngest.length}`,
+              detail: `Last ingested: ${entry.cveID} (${entry.vendorProject})`,
+            });
+          }
+        } catch (e) {
+          failed++;
+          const msg = `${entry.cveID}: ${e instanceof Error ? e.message : "unknown"}`;
+          failures.push(msg);
+          console.error("ingest failed:", msg);
+        }
+      }
+
+      const { count: reportCount } = await supabase
+        .from("threat_reports").select("*", { count: "exact", head: true });
+      const { count: entityCount } = await supabase
+        .from("kg_entities").select("*", { count: "exact", head: true });
+
+      await supabase.from("monitoring_events").insert({
+        event_type: "cisa_bootstrap_complete",
+        category: "ingest",
+        title: `CISA KEV bootstrap complete: ${succeeded} ingested, ${failed} failed`,
+        detail: `Corpus now: ${reportCount} reports, ${entityCount} entities. GraphRAG warm-up done.`,
+        metadata: { succeeded, failed, report_count: reportCount, entity_count: entityCount, sample_failures: failures.slice(0, 5) },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "unknown";
+      console.error("cisa-advisories-ingest worker error:", msg);
+      await supabase.from("monitoring_events").insert({
+        event_type: "cisa_bootstrap_error",
+        category: "ingest",
+        title: "CISA KEV bootstrap failed",
+        detail: msg,
+      });
     }
+  };
 
-    // 3. Final report
-    const { count: reportCount } = await supabase
-      .from("threat_reports")
-      .select("*", { count: "exact", head: true });
-    const { count: entityCount } = await supabase
-      .from("kg_entities")
-      .select("*", { count: "exact", head: true });
+  // Fire-and-forget: keep the runtime alive for the background task,
+  // but respond to the client immediately to avoid the 150s idle timeout.
+  // @ts-ignore — EdgeRuntime is provided by Supabase Edge Runtime
+  EdgeRuntime.waitUntil(runIngest());
 
-    await supabase.from("monitoring_events").insert({
-      event_type: "cisa_bootstrap_complete",
-      category: "ingest",
-      title: `CISA KEV bootstrap complete: ${succeeded} ingested, ${failed} failed`,
-      detail: `Corpus now: ${reportCount} reports, ${entityCount} entities. GraphRAG warm-up done.`,
-      metadata: {
-        succeeded,
-        failed,
-        skipped: entries.length - toIngest.length - failed,
-        report_count: reportCount,
-        entity_count: entityCount,
-        sample_failures: failures.slice(0, 5),
-      },
-    });
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        attempted: toIngest.length,
-        succeeded,
-        failed,
-        skipped_existing: skipExisting ? entries.length - toIngest.length : 0,
-        corpus: { reports: reportCount, entities: entityCount },
-        sample_failures: failures.slice(0, 3),
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "unknown";
-    console.error("cisa-advisories-ingest error:", msg);
-    await supabase.from("monitoring_events").insert({
-      event_type: "cisa_bootstrap_error",
-      category: "ingest",
-      title: "CISA KEV bootstrap failed",
-      detail: msg,
-    });
-    return new Response(
-      JSON.stringify({ ok: false, error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      queued: true,
+      limit,
+      message: `Bootstrap started in background. Watch monitoring_events (cisa_bootstrap_progress / _complete) on the Threat Feed for progress. Estimated ~${Math.ceil(limit * 6 / 60)}min for ${limit} advisories.`,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 });
+
