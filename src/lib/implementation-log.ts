@@ -403,6 +403,24 @@ export const implementationLog: LogEntry[] = [
       "src/lib/implementation-log.ts",
     ],
   },
+  {
+    version: "2.5.2",
+    date: "2026-04-18",
+    title: "Report download buttons on /experiments (PDF + ZIP bundle)",
+    category: "ui",
+    impact: "patch",
+    changes: [
+      "New src/components/ReportDownloads.tsx adds two header buttons to /experiments: 'Download Report (PDF)' (direct link to public/reports/experiments-academic-report.pdf) and 'Download All (ZIP)' which fetches /reports/manifest.json, downloads every listed file in parallel, and bundles them via JSZip into threatgraph-reports-YYYY-MM-DD.zip with an embedded README.txt index.",
+      "ZIP bundle covers: academic report (.pdf + .md), technical report (.md + .docx), white paper (.md + .docx), health report, repo inventory (.csv + .json), LLM call-sites (.csv + .json), implementation log (.csv + .json), and manifest.json — i.e. every artifact emitted by scripts/generate-reports.mjs.",
+      "Added jszip@3.10.1 dependency. Bundle is built entirely in-browser, no edge function required.",
+    ],
+    filesModified: [
+      "src/components/ReportDownloads.tsx",
+      "src/pages/Experiments.tsx",
+      "src/lib/implementation-log.ts",
+      "package.json",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
