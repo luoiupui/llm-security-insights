@@ -9,6 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { repoInventory, LLM_CALL_SITES, getRepoStats, type RepoFile } from "@/lib/github-sync";
+import { SelfMonitoringPanel } from "@/components/SelfMonitoringPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -127,6 +128,9 @@ export default function GitHubSync() {
           </motion.div>
         ))}
       </div>
+
+      {/* ── Self-monitoring artifacts ──────────────────────────── */}
+      <SelfMonitoringPanel />
 
       {/* ── Live LLM verification ──────────────────────────────── */}
       <Card className="bg-card/50 border-border/50">
