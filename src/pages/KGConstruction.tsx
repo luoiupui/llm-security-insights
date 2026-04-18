@@ -34,6 +34,7 @@ const SAMPLE = `APT-29 used SUNBURST backdoor in the SolarWinds Orion supply cha
 export default function KGConstruction() {
   const [inputText, setInputText] = useState(SAMPLE);
   const [ingesting, setIngesting] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
   const pipeline = useThreatPipeline();
 
   const handleExtract = async () => {
