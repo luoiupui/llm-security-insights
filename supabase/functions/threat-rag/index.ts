@@ -19,30 +19,29 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1";
-const EMBED_MODEL = "google/text-embedding-004"; // 768-dim, gemini-aligned
+const canon = (s: string) => String(s ?? "").trim().toLowerCase();
 
-async function embed(text: string, apiKey: string): Promise<number[] | null> {
-  // Lovable AI gateway exposes OpenAI-style embeddings endpoint
-  try {
-    const r = await fetch(`${AI_GATEWAY}/embeddings`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: EMBED_MODEL, input: text.slice(0, 8000) }),
-    });
-    if (!r.ok) {
-      console.error("embed failed", r.status, await r.text());
-      return null;
-    }
-    const j = await r.json();
-    return j?.data?.[0]?.embedding ?? null;
-  } catch (e) {
-    console.error("embed error", e);
-    return null;
-  }
+// Deterministic lexical "embedding" — token set used for Jaccard similarity.
+// No external embedding model available in the gateway, so we use lexical RAG.
+const STOPWORDS = new Set(["the","a","an","and","or","of","to","in","on","for","with","by","is","are","was","were","be","been","as","at","this","that","it","from","has","have","had","will","can","may","not","but","if","then","than","also","such","via","using","used","into","over","under","about"]);
+
+function tokenize(text: string): Set<string> {
+  return new Set(
+    String(text ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s.-]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 2 && !STOPWORDS.has(t))
+  );
 }
 
-const canon = (s: string) => String(s ?? "").trim().toLowerCase();
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -55,26 +54,34 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const apiKey = Deno.env.get("LOVABLE_API_KEY")!;
 
     if (mode === "embed_and_retrieve") {
-      const { text, top_k = 3, similarity_threshold = 0.5 } = body;
+      const { text, top_k = 3, similarity_threshold = 0.1 } = body;
       if (!text) {
         return new Response(JSON.stringify({ error: "text required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const vec = await embed(text, apiKey);
-      let similar: any[] = [];
-      if (vec) {
-        const { data } = await supabase.rpc("match_threat_reports", {
-          query_embedding: vec as any,
-          match_count: top_k,
-          similarity_threshold,
-        });
-        similar = data ?? [];
-      }
+      // Lexical RAG: pull recent reports, score by Jaccard token overlap
+      const queryTokens = tokenize(text);
+      const { data: candidates } = await supabase
+        .from("threat_reports")
+        .select("id, summary, source_text, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      const scored = (candidates ?? [])
+        .map((r: any) => {
+          const corpus = `${r.summary ?? ""} ${r.source_text ?? ""}`;
+          const sim = jaccard(queryTokens, tokenize(corpus));
+          return { ...r, similarity: sim };
+        })
+        .filter((r: any) => r.similarity >= similarity_threshold)
+        .sort((a: any, b: any) => b.similarity - a.similarity)
+        .slice(0, top_k);
+
+      const similar = scored;
 
       // GraphRAG — pull neighbouring subgraph for matched reports' entities
       let subgraph: any = { entities: [], relations: [] };
@@ -87,23 +94,22 @@ serve(async (req) => {
         subgraph = { entities: ents ?? [], relations: rels ?? [] };
       }
 
-      // Build context block to inject into extraction prompt
       const contextBlock = buildContextBlock(similar, subgraph);
 
-      // Log monitoring event
       await supabase.from("monitoring_events").insert({
         event_type: "rag_retrieval",
         category: "retrieval",
-        title: `Vector RAG: retrieved ${similar.length} similar reports`,
+        title: `Lexical RAG: retrieved ${similar.length} similar reports`,
         detail: `GraphRAG: ${subgraph.entities.length} entities + ${subgraph.relations.length} relations from history`,
-        metadata: { top_k, similarity_threshold, similar_count: similar.length },
+        metadata: { top_k, similarity_threshold, similar_count: similar.length, method: "jaccard_lexical" },
       });
 
       return new Response(JSON.stringify({
         similar_reports: similar,
         subgraph,
         context_block: contextBlock,
-        embedding_used: !!vec,
+        embedding_used: false,
+        retrieval_method: "lexical_jaccard",
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -115,7 +121,6 @@ serve(async (req) => {
         });
       }
 
-      const vec = await embed(source_text, apiKey);
       const summary = extraction?.graph_native?.graph_metadata?.narrative
         || extraction?.ner?.narrative_summary
         || source_text.slice(0, 240);
@@ -126,7 +131,6 @@ serve(async (req) => {
           source_text,
           source_type,
           summary,
-          embedding: vec as any,
           extraction_payload: extraction,
         })
         .select()
