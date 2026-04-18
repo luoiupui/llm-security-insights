@@ -234,6 +234,29 @@ export const implementationLog: LogEntry[] = [
       "src/App.tsx",
     ],
   },
+  {
+    version: "2.2.0",
+    date: "2026-04-18",
+    title: "Self-Monitoring Mechanism: Auto-Generated Reports + Drift Scanner",
+    category: "infrastructure",
+    impact: "minor",
+    changes: [
+      "Built scripts/generate-reports.mjs — single command produces 12 artifacts from repo state",
+      "Generates Technical Report (.md + .docx), White Paper (.md + .docx), 3 inventory tables (.csv + .json each), Health Report (.md), and a sha256 manifest.json",
+      "Added SelfMonitoringPanel embedded on Implementation Log and GitHub Sync pages",
+      "Drift scanner: diffs repo inventory vs files referenced in the log, flags undocumented files",
+      "Add-entry form: drafts a new log entry (auto-versioned) and copies a paste-ready TS snippet",
+      "All artifacts served as static downloads from /reports/* with sha256 + byte-size displayed",
+    ],
+    filesModified: [
+      "scripts/generate-reports.mjs",
+      "src/lib/self-monitoring.ts",
+      "src/components/SelfMonitoringPanel.tsx",
+      "src/pages/ImplementationLog.tsx",
+      "src/pages/GitHubSync.tsx",
+      "public/reports/manifest.json",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
