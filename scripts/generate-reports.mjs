@@ -41,12 +41,11 @@ function extractArrayLiteral(src, name) {
   return m[1].replace(/;\s*$/, "");
 }
 
-// Evaluate a TS-stripped array literal in a sandboxed Function
+// Evaluate a TS-stripped array literal in a sandboxed Function.
+// The data files are pure JSON-ish object literals — no TS annotations inside the array,
+// only on the `export const X: Type[] = [...]` declaration which we already stripped via regex.
 function evalArray(literal) {
-  // Strip TS-only `as const`, type assertions, and remove trailing commas in objects
-  const cleaned = literal
-    .replace(/\sas\s+const/g, "")
-    .replace(/:\s*\w+(\[\])?/g, ""); // crude: remove type annotations like `: string[]` (none here)
+  const cleaned = literal.replace(/\sas\s+const/g, "");
   // eslint-disable-next-line no-new-func
   return new Function(`return ${cleaned}`)();
 }
