@@ -121,7 +121,6 @@ serve(async (req) => {
         });
       }
 
-      const vec = await embed(source_text, apiKey);
       const summary = extraction?.graph_native?.graph_metadata?.narrative
         || extraction?.ner?.narrative_summary
         || source_text.slice(0, 240);
@@ -132,7 +131,6 @@ serve(async (req) => {
           source_text,
           source_type,
           summary,
-          embedding: vec as any,
           extraction_payload: extraction,
         })
         .select()
