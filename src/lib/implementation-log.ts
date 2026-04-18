@@ -335,6 +335,32 @@ export const implementationLog: LogEntry[] = [
       "src/lib/implementation-log.ts",
     ],
   },
+  {
+    version: "2.4.0",
+    date: "2026-04-18",
+    title: "30-case smoke-test corpus + MITRE Groups ingest (acceptance test, not evaluation)",
+    category: "pipeline",
+    impact: "minor",
+    changes: [
+      "Expanded sampleTestCases from 3 → 30 hand-curated real-world threat-intel snippets, moved into a dedicated src/lib/test-corpus.ts module. 14 are anchored to CISA KEV CVEs already in kb_entries (CVE-2024-3400, CVE-2024-27198, CVE-2021-44228, CVE-2020-10148, CVE-2019-11539, CVE-2020-11651/52/16846, CVE-2021-43798, CVE-2020-6287/6207, CVE-2026-20963/20131, CVE-2021-35395, CVE-2017-16651, CVE-2025-48703); 11 are MITRE technique-anchored (T1566, T1190, T1059, T1078, T1486, T1003, T1021, T1055, T1027, T1071); 5 are multi-actor chained (HAFNIUM ProxyLogon, UNC2452/APT29 SUNBURST chain, APT10 MSP attacks, Volt Typhoon LOTL, Sandworm FortiOS chain).",
+      "Each case carries gold-standard entity/relation/causal labels paraphrased from real CISA, Mandiant, MSTIC, CrowdStrike, and Cisco Talos advisories — not LLM-generated.",
+      "kb-ingest now also pulls MITRE Groups (intrusion-set objects, IDs G####) plus an alias index so attribution ground truth ('Cozy Bear' → APT29) resolves at validation time. New kb_types: mitre_group and mitre_group_alias.",
+      "New /experiments → 'Smoke Test (n=30)' tab runs all 30 cases through the existing experiment-runner sequentially, aggregates P/R/F1 per system, and shows a per-case scorecard with pass/fail (Ours F1 ≥ 50% threshold). Output is logged to monitoring_events as 'smoke_test_run' under category='acceptance' and is explicitly labelled 'smoke-test (acceptance)' — never 'evaluation'.",
+      "Corpus realism panel on the same tab shows live counts of real CVEs, real APT actors, and real MITRE techniques referenced, so anyone reading the dashboard knows the realism level (REAL anchors / HAND-LABELLED gold standard) and the confidence band (±4% at n=30).",
+    ],
+    knownGaps: [
+      "n=30 gives a ±4% confidence band — adequate for acceptance/smoke testing and chapter-defendable directional claims, but for true statistical evaluation expand the corpus to n≥100 with multiple independent annotators and inter-annotator agreement scores.",
+      "Smoke-test scorecard uses a single threshold (Ours F1 ≥ 50%) per case; a stricter per-task threshold (NER ≥ 70%, RE ≥ 60%, Causality ≥ 50%) would be more diagnostic.",
+      "MITRE Groups ingest must be triggered manually once via /kg-construction → 'Ingest knowledge bases' to populate the new kb_types; future runs are idempotent thanks to the (kb_type, external_id) unique constraint.",
+    ],
+    filesModified: [
+      "src/lib/test-corpus.ts",
+      "src/lib/experiment-config.ts",
+      "src/pages/Experiments.tsx",
+      "supabase/functions/kb-ingest/index.ts",
+      "src/lib/implementation-log.ts",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
