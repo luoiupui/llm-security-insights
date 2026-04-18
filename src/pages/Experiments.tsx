@@ -670,6 +670,158 @@ export default function Experiments() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ── Smoke Test (Acceptance Test, n=30) ── */}
+        <TabsContent value="smoke" className="mt-4 space-y-4">
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="text-[11px] text-foreground/90 leading-relaxed">
+                <strong className="text-amber-500">SMOKE TEST / ACCEPTANCE TEST — NOT AN EVALUATION.</strong>{" "}
+                Runs all <strong>{corpusStats.totalSamples}</strong> hand-curated real-world cases
+                ({corpusStats.cveAnchored} CISA KEV-anchored, {corpusStats.mitreAnchored} MITRE technique-anchored,
+                {" "}{corpusStats.multiActorChained} multi-actor chained) end-to-end through all 3 systems.
+                Results are reported with a <strong>{corpusStats.confidenceBand}</strong> confidence band and
+                logged to <code>monitoring_events</code> as <code>smoke_test_run</code>. Pass threshold: Ours F1 ≥ 50% per case.
+                For thesis-defendable evaluation numbers, expand the corpus to n≥100 and run multiple trials.
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 bg-card/80">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" /> Smoke Test Harness
+                </CardTitle>
+                <Button size="sm" onClick={runSmokeTest} disabled={smokeRunning} className="gap-1.5">
+                  {smokeRunning ? <Clock className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                  {smokeRunning ? `Running ${smokeProgress.done}/${smokeProgress.total}…` : `Run Smoke Test (${corpusStats.totalSamples} cases)`}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Corpus realism panel */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="bg-muted/30 p-2 rounded border border-border/30">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Cases</p>
+                  <p className="text-sm font-mono font-bold text-foreground">{corpusStats.totalSamples}</p>
+                </div>
+                <div className="bg-muted/30 p-2 rounded border border-border/30">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Real CVEs</p>
+                  <p className="text-sm font-mono font-bold text-foreground">{corpusStats.uniqueCVEs}</p>
+                </div>
+                <div className="bg-muted/30 p-2 rounded border border-border/30">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Real APT actors</p>
+                  <p className="text-sm font-mono font-bold text-foreground">{corpusStats.uniqueActors}</p>
+                </div>
+                <div className="bg-muted/30 p-2 rounded border border-border/30">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">MITRE techniques</p>
+                  <p className="text-sm font-mono font-bold text-foreground">{corpusStats.uniqueMitreTechniques}</p>
+                </div>
+              </div>
+
+              {smokeRunning && (
+                <div className="bg-background/80 rounded-md p-2 border border-border/30 text-[10px] font-mono">
+                  Running <span className="text-primary">{smokeProgress.current}</span> · {smokeProgress.done}/{smokeProgress.total}
+                  <div className="w-full h-1 bg-muted/40 rounded mt-1 overflow-hidden">
+                    <div className="h-full bg-primary transition-all" style={{ width: `${(smokeProgress.done / Math.max(smokeProgress.total, 1)) * 100}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {smokeResults && (
+                <>
+                  {/* Headline scorecard */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <Card className="bg-primary/10 border-primary/30">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Pass rate</p>
+                        <p className="text-lg font-mono font-bold text-primary">{smokeResults.pass_rate}%</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Failures</p>
+                        <p className="text-lg font-mono font-bold text-foreground">{smokeResults.failures}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Total time</p>
+                        <p className="text-lg font-mono font-bold text-foreground">{(smokeResults.elapsed_ms / 1000).toFixed(1)}s</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-2 text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase">Classification</p>
+                        <p className="text-[10px] font-mono font-bold text-amber-500 mt-1">{smokeResults.classification}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Per-system aggregate */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    {Object.entries(smokeResults.aggregate).map(([sys, m]: [string, any]) => {
+                      const cfg = sys === "ours" ? ourSystem : baselines.find((b) => b.id === sys);
+                      return (
+                        <Card key={sys} className="bg-card/50 border-border/50">
+                          <CardContent className="p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-2 h-2 rounded-full" style={{ background: cfg?.color }} />
+                              <span className="text-xs font-semibold">{cfg?.shortName ?? sys}</span>
+                              <Badge variant="outline" className="text-[9px] ml-auto">{m.avg_ms}ms avg</Badge>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div><p className="text-[10px] text-muted-foreground">P</p><p className="text-sm font-mono font-bold">{m.precision}%</p></div>
+                              <div><p className="text-[10px] text-muted-foreground">R</p><p className="text-sm font-mono font-bold">{m.recall}%</p></div>
+                              <div><p className="text-[10px] text-muted-foreground">F1</p><p className="text-sm font-mono font-bold text-primary">{m.f1}%</p></div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+
+                  {/* Per-sample scorecard */}
+                  <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs font-semibold">Per-case scorecard</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                        <table className="w-full text-[10px] font-mono">
+                          <thead className="sticky top-0 bg-card">
+                            <tr className="border-b border-border/50 text-muted-foreground">
+                              <th className="text-left p-1">Case</th>
+                              <th className="text-left p-1">Source</th>
+                              <th className="text-center p-1">Ours</th>
+                              <th className="text-center p-1">ZS</th>
+                              <th className="text-center p-1">Rule</th>
+                              <th className="text-center p-1">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {smokeResults.scorecard.map((row: any) => (
+                              <tr key={row.id} className="border-b border-border/20">
+                                <td className="p-1 text-foreground">{row.id}</td>
+                                <td className="p-1 text-muted-foreground/80 truncate max-w-[180px]" title={row.source}>{row.source?.slice(0, 30) ?? "—"}</td>
+                                <td className="p-1 text-center text-primary">{row.ours?.toFixed?.(1) ?? "—"}</td>
+                                <td className="p-1 text-center">{row["llm-zeroshot"]?.toFixed?.(1) ?? "—"}</td>
+                                <td className="p-1 text-center">{row["rule-based"]?.toFixed?.(1) ?? "—"}</td>
+                                <td className={`p-1 text-center font-bold ${row.status === "pass" ? "text-primary" : "text-destructive"}`}>{row.status}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
