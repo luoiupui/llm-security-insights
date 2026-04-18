@@ -215,6 +215,25 @@ export const implementationLog: LogEntry[] = [
       "supabase/functions/experiment-runner/index.ts",
     ],
   },
+  {
+    version: "2.1.0",
+    date: "2026-04-18",
+    title: "GitHub Sync Dashboard & Live LLM Verification",
+    category: "infrastructure",
+    impact: "minor",
+    changes: [
+      "Audited every file in the repo for LLM involvement (direct call / orchestrator / consumer)",
+      "Catalogued 7 verified LLM call-sites across 4 edge functions (all → google/gemini-3-flash-preview)",
+      "Added live probe button: invokes experiment-runner → AI Gateway, reports round-trip latency",
+      "New 'GitHub Sync' sidebar page with filterable repo inventory table (by layer / LLM role / chapter)",
+    ],
+    filesModified: [
+      "src/lib/github-sync.ts",
+      "src/pages/GitHubSync.tsx",
+      "src/components/AppSidebar.tsx",
+      "src/App.tsx",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
