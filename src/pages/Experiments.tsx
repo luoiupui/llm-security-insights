@@ -21,6 +21,7 @@ import {
 } from "@/lib/experiment-config";
 import { corpusStats } from "@/lib/test-corpus";
 import { useToast } from "@/hooks/use-toast";
+import { ReportDownloads } from "@/components/ReportDownloads";
 
 const chartStyle = {
   background: "hsl(220, 18%, 10%)",
