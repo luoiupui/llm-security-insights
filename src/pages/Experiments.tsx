@@ -755,7 +755,7 @@ export default function Experiments() {
                     <Card className="bg-card/50 border-border/50">
                       <CardContent className="p-2 text-center">
                         <p className="text-[9px] text-muted-foreground uppercase">Classification</p>
-                        <p className="text-[10px] font-mono font-bold text-amber-500 mt-1">{smokeResults.classification}</p>
+                        <p className="text-[10px] font-mono font-bold text-warning mt-1">{smokeResults.classification}</p>
                       </CardContent>
                     </Card>
                   </div>
