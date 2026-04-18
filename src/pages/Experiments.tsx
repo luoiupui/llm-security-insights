@@ -43,6 +43,32 @@ export default function Experiments() {
   const [smokeResults, setSmokeResults] = useState<any | null>(null);
   const [smokeProgress, setSmokeProgress] = useState({ done: 0, total: 0, current: "" });
 
+  /* System Test (full 6-layer chain) */
+  const [sysTestRunning, setSysTestRunning] = useState(false);
+  const [sysTestResults, setSysTestResults] = useState<SystemTestSummary | null>(null);
+  const [sysTestSize, setSysTestSize] = useState<5 | 10 | 30>(5);
+  const [sysTestProgress, setSysTestProgress] = useState({ done: 0, total: 0, current: "", layer: "" });
+
+  const runFullSystemTest = useCallback(async () => {
+    setSysTestRunning(true);
+    setSysTestResults(null);
+    setSysTestProgress({ done: 0, total: sysTestSize, current: "", layer: "" });
+    try {
+      const summary = await runSystemTest(sysTestSize, (done, total, current, layer) =>
+        setSysTestProgress({ done, total, current, layer: layer ?? "" }),
+      );
+      setSysTestResults(summary);
+      toast({
+        title: "System Test Complete",
+        description: `Pass ${summary.passRate}% · ${(summary.totalMs / 1000).toFixed(1)}s · n=${summary.n}`,
+      });
+    } catch (e: any) {
+      toast({ title: "System Test Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSysTestRunning(false);
+    }
+  }, [sysTestSize, toast]);
+
   /* ── Run hallucination evaluation ── */
   const runHallucinationEval = useCallback(async () => {
     setHallucRunning(true);
