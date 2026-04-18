@@ -673,11 +673,11 @@ export default function Experiments() {
 
         {/* ── Smoke Test (Acceptance Test, n=30) ── */}
         <TabsContent value="smoke" className="mt-4 space-y-4">
-          <Card className="border-amber-500/30 bg-amber-500/5">
+          <Card className="border-warning/30 bg-warning/5">
             <CardContent className="p-3 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
               <div className="text-[11px] text-foreground/90 leading-relaxed">
-                <strong className="text-amber-500">SMOKE TEST / ACCEPTANCE TEST — NOT AN EVALUATION.</strong>{" "}
+                <strong className="text-warning">SMOKE TEST / ACCEPTANCE TEST — NOT AN EVALUATION.</strong>{" "}
                 Runs all <strong>{corpusStats.totalSamples}</strong> hand-curated real-world cases
                 ({corpusStats.cveAnchored} CISA KEV-anchored, {corpusStats.mitreAnchored} MITRE technique-anchored,
                 {" "}{corpusStats.multiActorChained} multi-actor chained) end-to-end through all 3 systems.
