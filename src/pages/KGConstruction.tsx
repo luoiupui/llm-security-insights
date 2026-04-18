@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle, DownloadCloud } from "lucide-react";
+import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle, DownloadCloud, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ const SAMPLE = `APT-29 used SUNBURST backdoor in the SolarWinds Orion supply cha
 export default function KGConstruction() {
   const [inputText, setInputText] = useState(SAMPLE);
   const [ingesting, setIngesting] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
   const pipeline = useThreatPipeline();
 
   const handleExtract = async () => {
@@ -75,6 +76,27 @@ export default function KGConstruction() {
       toast.error(`KB ingest failed: ${e instanceof Error ? e.message : "unknown"}`);
     } finally {
       setIngesting(false);
+    }
+  };
+
+  const handleBootstrapCorpus = async () => {
+    setBootstrapping(true);
+    toast.info("Bootstrapping GraphRAG corpus from CISA KEV — ~2-4 min for 25 advisories…");
+    try {
+      const { data, error } = await supabase.functions.invoke("cisa-advisories-ingest", {
+        body: { limit: 25, skip_existing: true },
+      });
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data.error || "ingest failed");
+      toast.success(
+        `Bootstrap done → ${data?.succeeded ?? 0} advisories ingested. ` +
+        `Corpus: ${data?.corpus?.reports ?? 0} reports / ${data?.corpus?.entities ?? 0} entities. ` +
+        `Layer B+C is now warm.`,
+      );
+    } catch (e) {
+      toast.error(`Bootstrap failed: ${e instanceof Error ? e.message : "unknown"}`);
+    } finally {
+      setBootstrapping(false);
     }
   };
 
@@ -138,10 +160,15 @@ export default function KGConstruction() {
               {ingesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
               Refresh KB (MITRE ATT&amp;CK + CISA KEV)
             </Button>
+            <Button onClick={handleBootstrapCorpus} disabled={bootstrapping} variant="outline" className="gap-2">
+              {bootstrapping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Bootstrap GraphRAG Corpus (CISA advisories)
+            </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Extract runs Layers B+C (RAG/GraphRAG) → LLM extraction → Layer A (KB grounding) → persists to KG so GraphRAG warms up across runs.
-            "Refresh KB" pulls ~700 MITRE techniques + ~1100 CISA KEV CVEs into <code className="font-mono">kb_entries</code>.
+            <strong>Extract</strong> runs Layers B+C (RAG/GraphRAG) → LLM extraction → Layer A (KB grounding) → persists to KG.
+            <strong> Refresh KB</strong> updates Layer A ground truth (~700 MITRE + ~1100 CVEs in <code className="font-mono">kb_entries</code>).
+            <strong> Bootstrap</strong> seeds Layer B+C corpus by running 25 recent CISA advisories through the full pipeline (solves cold-start). Layer A is never touched by Bootstrap.
           </p>
         </CardContent>
       </Card>
