@@ -40,7 +40,12 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ── Real systems ──
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // ── Run all 3 systems ──
     const oursStart = Date.now();
     const oursOut = await runLLM(text, COT_SYSTEM, /*useCot=*/true);
     const oursTime = Date.now() - oursStart;
@@ -57,20 +62,56 @@ serve(async (req) => {
     const zsMetrics = computeMetrics(zsOut, ground_truth);
     const ruleMetrics = computeMetrics(ruleOut, ground_truth);
 
-    // ── Log to monitoring ──
-    try {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      );
-      await supabase.from("monitoring_events").insert({
-        event_type: "baseline_run",
-        category: "experiment",
-        title: `Stage ${stage} baseline run · task=${task}`,
-        detail: `Ours F1=${oursMetrics.f1}% · Zero-shot F1=${zsMetrics.f1}% · Rule F1=${ruleMetrics.f1}%`,
-        metadata: { stage, task, ours: oursMetrics, zeroshot: zsMetrics, rule: ruleMetrics },
+    /* ── HALLUCINATION TASK: validate every system against Layer A KB + ground truth ── */
+    let hallucinationReport: any = null;
+    if (task === "hallucination") {
+      const [oursVal, zsVal, ruleVal] = await Promise.all([
+        validateAgainstKB(supabase, oursOut),
+        validateAgainstKB(supabase, zsOut),
+        validateAgainstKB(supabase, ruleOut),
+      ]);
+      const oursH = computeHallucinationRates(oursOut, ground_truth, oursVal);
+      const zsH = computeHallucinationRates(zsOut, ground_truth, zsVal);
+      const ruleH = computeHallucinationRates(ruleOut, ground_truth, ruleVal);
+
+      // Build root-cause analysis: WHY did each system hallucinate?
+      const analysis = buildHallucinationAnalysis({
+        ours: { out: oursOut, val: oursVal, h: oursH },
+        zs: { out: zsOut, val: zsVal, h: zsH },
+        rule: { out: ruleOut, val: ruleVal, h: ruleH },
       });
-    } catch (e) { console.error("log error", e); }
+
+      hallucinationReport = {
+        ours: oursH, zeroshot: zsH, rule: ruleH,
+        findings: { ours: oursVal.findings, zeroshot: zsVal.findings, rule: ruleVal.findings },
+        analysis,
+        reduction_strategy: REDUCTION_STRATEGY,
+      };
+
+      // Persist a rich, structured event for the analysis log
+      try {
+        await supabase.from("monitoring_events").insert({
+          event_type: "hallucination_eval",
+          category: "experiment",
+          title: `Stage ${stage} hallucination eval · ours=${oursH.false_entity_rate}% · zs=${zsH.false_entity_rate}% · rule=${ruleH.false_entity_rate}% false-entity`,
+          detail:
+            `Ours: ${oursH.hallucinated_ids} hallucinated IDs / ${oursH.kb_grounding_accuracy}% grounded · ` +
+            `ZS: ${zsH.hallucinated_ids} hallucinated IDs / ${zsH.kb_grounding_accuracy}% grounded · ` +
+            `Rule: ${ruleH.hallucinated_ids} hallucinated IDs / ${ruleH.kb_grounding_accuracy}% grounded`,
+          metadata: { stage, task, ...hallucinationReport },
+        });
+      } catch (e) { console.error("hallucination log error", e); }
+    } else {
+      try {
+        await supabase.from("monitoring_events").insert({
+          event_type: "baseline_run",
+          category: "experiment",
+          title: `Stage ${stage} baseline run · task=${task}`,
+          detail: `Ours F1=${oursMetrics.f1}% · Zero-shot F1=${zsMetrics.f1}% · Rule F1=${ruleMetrics.f1}%`,
+          metadata: { stage, task, ours: oursMetrics, zeroshot: zsMetrics, rule: ruleMetrics },
+        });
+      } catch (e) { console.error("log error", e); }
+    }
 
     return new Response(JSON.stringify({
       results: [
@@ -78,7 +119,9 @@ serve(async (req) => {
         { system: "llm-zeroshot", metrics: zsMetrics, runTime: zsTime, output: zsOut },
         { system: "rule-based", metrics: ruleMetrics, runTime: ruleTime, output: ruleOut },
       ],
+      hallucination: hallucinationReport,
       stage,
+      task,
       timestamp: new Date().toISOString(),
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
@@ -223,3 +266,117 @@ function computeMetrics(predicted: any, groundTruth: any) {
     causal_f1: r(cF1),
   };
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * Hallucination evaluation
+ * ───────────────────────────────────────────────────────────── */
+
+/** Re-implements Layer A grounding inline (avoids HTTP roundtrip to kb-validate). */
+async function validateAgainstKB(supabase: any, predicted: any) {
+  const { data: kb } = await supabase.from("kb_entries").select("external_id, kb_type, name");
+  const tech = new Set<string>(), tactic = new Set<string>(), cve = new Set<string>(), capec = new Set<string>();
+  (kb || []).forEach((row: any) => {
+    if (row.kb_type === "mitre_technique") tech.add(row.external_id);
+    else if (row.kb_type === "mitre_tactic") tactic.add(row.external_id);
+    else if (row.kb_type === "cve") cve.add(String(row.external_id).toUpperCase());
+    else if (row.kb_type === "capec") capec.add(String(row.external_id).toUpperCase());
+  });
+
+  const techRe = /^T\d{4}(\.\d{3})?$/;
+  const tacticRe = /^TA\d{4}$/;
+  const cveRe = /^CVE-\d{4}-\d{4,7}$/i;
+  const capecRe = /^CAPEC-\d+$/i;
+  const findings: any[] = [];
+
+  const checkOne = (raw: string, ctx: any) => {
+    const v = String(raw ?? "").trim();
+    if (!v) return;
+    if (techRe.test(v)) {
+      findings.push({ id_type: "mitre_technique", raw_value: v, kind: tech.has(v) ? "ok" : "hallucinated", ...ctx });
+    } else if (tacticRe.test(v)) {
+      findings.push({ id_type: "mitre_tactic", raw_value: v, kind: tactic.has(v) ? "ok" : "hallucinated", ...ctx });
+    } else if (cveRe.test(v)) {
+      findings.push({ id_type: "cve", raw_value: v, kind: cve.has(v.toUpperCase()) ? "ok" : "non_canonical", ...ctx });
+    } else if (capecRe.test(v)) {
+      findings.push({ id_type: "capec", raw_value: v, kind: capec.has(v.toUpperCase()) ? "ok" : "non_canonical", ...ctx });
+    }
+  };
+
+  for (const e of (predicted.entities || [])) {
+    if (e?.mitre_id) checkOne(e.mitre_id, { entity_name: e.name, source: "entity.mitre_id" });
+    const m = typeof e?.name === "string" && e.name.match(/(T\d{4}(?:\.\d{3})?|TA\d{4}|CVE-\d{4}-\d{4,7}|CAPEC-\d+)/i);
+    if (m) checkOne(m[0], { entity_name: e.name, source: "entity.name" });
+  }
+
+  const total = findings.length;
+  const ok = findings.filter((f) => f.kind === "ok").length;
+  const hallucinated = findings.filter((f) => f.kind === "hallucinated").length;
+  const non_canonical = findings.filter((f) => f.kind === "non_canonical").length;
+  return { findings, total, ok, hallucinated, non_canonical, kb_size: (kb || []).length };
+}
+
+/** Compute hallucination KPIs for a system's output vs ground-truth. */
+function computeHallucinationRates(predicted: any, gt: any, val: any) {
+  const norm = (s: any) => String(s ?? "").trim().toLowerCase();
+  const gtEntities = new Set((gt.entities || []).map((e: any) => norm(e.name)));
+  const pdEntities = (predicted.entities || []).filter((e: any) => e?.name);
+  const falseEntities = pdEntities.filter((e: any) => !gtEntities.has(norm(e.name)));
+
+  const relKey = (r: any) => `${norm(r?.source)}→${norm(r?.relation ?? r?.predicate)}→${norm(r?.target)}`;
+  const gtRels = new Set((gt.relations || []).map(relKey));
+  const pdRels = (predicted.relations || []).filter((r: any) => r);
+  const falseRels = pdRels.filter((r: any) => !gtRels.has(relKey(r)));
+
+  const r = (n: number) => Math.round(n * 1000) / 10;
+  const false_entity_rate = pdEntities.length > 0 ? r(falseEntities.length / pdEntities.length) : 0;
+  const false_relation_rate = pdRels.length > 0 ? r(falseRels.length / pdRels.length) : 0;
+  const kb_grounding_accuracy = val.total > 0 ? r(val.ok / val.total) : 100;
+
+  return {
+    predicted_entities: pdEntities.length,
+    false_entities: falseEntities.length,
+    false_entity_rate,
+    predicted_relations: pdRels.length,
+    false_relations: falseRels.length,
+    false_relation_rate,
+    hallucinated_ids: val.hallucinated,
+    non_canonical_ids: val.non_canonical,
+    kb_grounding_accuracy,
+    sample_false_entities: falseEntities.slice(0, 5).map((e: any) => e.name),
+    sample_false_relations: falseRels.slice(0, 5).map((r: any) => `${r.source}→${r.relation}→${r.target}`),
+  };
+}
+
+/** Root-cause analysis: WHY each system hallucinated (heuristic categorisation). */
+function buildHallucinationAnalysis(systems: any) {
+  const analyse = (label: string, s: any) => {
+    const causes: string[] = [];
+    if (s.h.hallucinated_ids > 0)
+      causes.push(`${s.h.hallucinated_ids} fabricated MITRE IDs not in canonical KB (Layer A caught these)`);
+    if (s.h.false_relation_rate > 5)
+      causes.push(`high false-relation rate (${s.h.false_relation_rate}%): predicate over-generation, no STIX SRO constraint`);
+    if (s.h.false_entity_rate > 10)
+      causes.push(`entity over-generation (${s.h.false_entity_rate}%): no graph-context anchoring (Layer C absent)`);
+    if (label === "rule" && s.h.false_relation_rate > 0)
+      causes.push("co-occurrence window produces spurious 'related-to' edges with no semantic check");
+    if (label === "zs" && s.h.false_entity_rate > 0)
+      causes.push("vanilla 1-shot prompt lacks ontology grounding → invents entity types");
+    if (label === "ours" && s.h.false_entity_rate === 0 && s.h.hallucinated_ids === 0)
+      causes.push("graph-native CoT + Layer A validation + Layer B/C retrieval suppressed all measurable hallucinations on this sample");
+    return causes.length ? causes : ["no measurable hallucinations on this sample"];
+  };
+  return {
+    ours: analyse("ours", systems.ours),
+    zeroshot: analyse("zs", systems.zs),
+    rule: analyse("rule", systems.rule),
+  };
+}
+
+const REDUCTION_STRATEGY = [
+  "Layer A (KB grounding): every emitted MITRE/CVE/CAPEC ID validated against canonical kb_entries; hallucinated IDs flagged deterministically (no LLM cost).",
+  "Layer B (Vector RAG): retrieve top-k similar past reports → injected into prompt → LLM anchored to prior phrasing instead of free-association.",
+  "Layer C (GraphRAG): fetch neighbouring subgraph around overlapping entities → LLM sees structured prior facts → false-relation rate drops sharply.",
+  "8-step CoT: explicit STIX SDO/SRO constraint at reasoning step 2 prevents predicate invention.",
+  "Symbolic conflict engine: 10 post-hoc rules (DAG cycle, orphan node, confidence anomaly) catch residual hallucinations the LLM missed.",
+  "Confidence calibration: every triple carries a propagated confidence; low-confidence inferences are surfaced rather than asserted.",
+];

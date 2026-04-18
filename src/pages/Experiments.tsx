@@ -35,6 +35,35 @@ export default function Experiments() {
   const [running, setRunning] = useState(false);
   const [liveResults, setLiveResults] = useState<any[]>([]);
   const [runLog, setRunLog] = useState<string[]>([]);
+  const [hallucResult, setHallucResult] = useState<any>(null);
+  const [hallucRunning, setHallucRunning] = useState(false);
+
+  /* ── Run hallucination evaluation ── */
+  const runHallucinationEval = useCallback(async () => {
+    setHallucRunning(true);
+    setHallucResult(null);
+    const sample = sampleTestCases[0];
+    try {
+      const { data, error } = await supabase.functions.invoke("experiment-runner", {
+        body: {
+          text: sample.text,
+          ground_truth: sample.groundTruth,
+          task: "hallucination",
+          stage: activeStage,
+        },
+      });
+      if (error) throw error;
+      setHallucResult(data.hallucination);
+      toast({
+        title: "Hallucination Eval Complete",
+        description: `Logged to monitoring_events · Ours grounding ${data.hallucination?.ours?.kb_grounding_accuracy ?? "—"}%`,
+      });
+    } catch (err: any) {
+      toast({ title: "Hallucination Eval Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setHallucRunning(false);
+    }
+  }, [activeStage, toast]);
 
   const stage1 = getStage1Results();
   const stage2 = getStage2Results();
@@ -324,7 +353,117 @@ export default function Experiments() {
         </TabsContent>
 
         {/* ── Hallucination Control ── */}
-        <TabsContent value="hallucination" className="mt-4">
+        <TabsContent value="hallucination" className="mt-4 space-y-4">
+          {/* Live hallucination evaluation runner */}
+          <Card className="border-border/50 bg-card/80">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-primary" /> Live Hallucination Evaluation
+                </CardTitle>
+                <Button size="sm" onClick={runHallucinationEval} disabled={hallucRunning} className="gap-1.5">
+                  {hallucRunning ? <Clock className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                  {hallucRunning ? "Evaluating..." : "Run Hallucination Eval"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-[11px] text-muted-foreground">
+                Runs all 3 systems on a sample, validates every emitted MITRE/CVE/CAPEC ID against Layer A KB
+                (<code>kb_entries</code>), then computes false-entity / false-relation / KB-grounding rates.
+                Each run is appended to <code>monitoring_events</code> as a <code>hallucination_eval</code> event with full root-cause analysis and the reduction-strategy rationale.
+              </p>
+
+              {hallucResult && (
+                <>
+                  {/* Measured rates */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {([
+                      ["ours", "Ours (LLM+KG+RAG)", hallucResult.ours, "hsl(160, 70%, 45%)"],
+                      ["zeroshot", "LLM Zero-Shot", hallucResult.zeroshot, "hsl(200, 80%, 55%)"],
+                      ["rule", "Rule-Based", hallucResult.rule, "hsl(38, 92%, 50%)"],
+                    ] as const).map(([key, label, h, color]) => (
+                      <Card key={key} className="bg-card/50 border-border/50">
+                        <CardContent className="p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+                            <span className="text-xs font-semibold">{label}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-center">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">False entity rate</p>
+                              <p className="text-sm font-mono font-bold">{h.false_entity_rate}%</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">False relation rate</p>
+                              <p className="text-sm font-mono font-bold">{h.false_relation_rate}%</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">KB grounding</p>
+                              <p className="text-sm font-mono font-bold text-primary">{h.kb_grounding_accuracy}%</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">Hallucinated IDs</p>
+                              <p className="text-sm font-mono font-bold">{h.hallucinated_ids}</p>
+                            </div>
+                          </div>
+                          {h.sample_false_entities?.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-border/30">
+                              <p className="text-[9px] text-muted-foreground mb-1">Sample false entities:</p>
+                              <p className="text-[10px] font-mono text-foreground/80 leading-snug">
+                                {h.sample_false_entities.join(", ")}
+                              </p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Root-cause analysis */}
+                  <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                        <AlertTriangle className="w-3 h-3 text-destructive" />
+                        Root-cause analysis (why did each system hallucinate?)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {(["ours", "zeroshot", "rule"] as const).map((k) => (
+                        <div key={k}>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{k}</p>
+                          <ul className="text-[11px] text-foreground/80 list-disc pl-4 space-y-0.5">
+                            {(hallucResult.analysis?.[k] || []).map((line: string, i: number) => (
+                              <li key={i}>{line}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+
+                  {/* Reduction strategy */}
+                  <Card className="bg-primary/5 border-primary/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-primary" />
+                        Hallucination-reduction strategy (recorded in event metadata)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ol className="text-[11px] text-foreground/80 list-decimal pl-4 space-y-1">
+                        {(hallucResult.reduction_strategy || []).map((line: string, i: number) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ol>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Reference table (kept) */}
           <Card className="border-border/50 bg-card/80">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
