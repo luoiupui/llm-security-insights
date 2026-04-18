@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { implementationLog, type LogEntry } from "@/lib/implementation-log";
 import { useState } from "react";
+import { SelfMonitoringPanel } from "@/components/SelfMonitoringPanel";
 
 const categoryColors: Record<LogEntry["category"], string> = {
   architecture: "bg-primary/20 text-primary",
@@ -71,6 +72,9 @@ export default function ImplementationLog() {
           </motion.div>
         ))}
       </div>
+
+      {/* Self-monitoring artifacts (downloads + scanner + add-entry form) */}
+      <SelfMonitoringPanel />
 
       {/* Category filter */}
       <Tabs value={activeCategory} onValueChange={setActiveCategory}>
