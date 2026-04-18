@@ -3,7 +3,7 @@
 **Generated:** 2026-04-18
 **Backbone Model:** google/gemini-3-flash-preview (via Lovable AI Gateway)
 **Backend:** Supabase Edge Functions (Lovable Cloud)
-**Versions tracked:** 11
+**Versions tracked:** 12
 
 ---
 
@@ -199,3 +199,11 @@
 - Catalogued 7 verified LLM call-sites across 4 edge functions (all → google/gemini-3-flash-preview)
 - Added live probe button: invokes experiment-runner → AI Gateway, reports round-trip latency
 - New 'GitHub Sync' sidebar page with filterable repo inventory table (by layer / LLM role / chapter)
+
+### v2.2.0 — Self-Monitoring Mechanism: Auto-Generated Reports + Drift Scanner (2026-04-18, minor)
+- Built scripts/generate-reports.mjs — single command produces 12 artifacts from repo state
+- Generates Technical Report (.md + .docx), White Paper (.md + .docx), 3 inventory tables (.csv + .json each), Health Report (.md), and a sha256 manifest.json
+- Added SelfMonitoringPanel embedded on Implementation Log and GitHub Sync pages
+- Drift scanner: diffs repo inventory vs files referenced in the log, flags undocumented files
+- Add-entry form: drafts a new log entry (auto-versioned) and copies a paste-ready TS snippet
+- All artifacts served as static downloads from /reports/* with sha256 + byte-size displayed

@@ -3,10 +3,10 @@
 **Generated:** 2026-04-18
 
 ## Sync status
-- Latest log version: **v2.1.0** (2026-04-18)
-- Total log entries: **11**
+- Latest log version: **v2.2.0** (2026-04-18)
+- Total log entries: **12**
 - Repo files inventoried: **23**
-- Files referenced in log: **18**
+- Files referenced in log: **22**
 - Verified LLM call-sites: **7**
 
 ## Drift detection
@@ -17,8 +17,12 @@
   - `src/components/DashboardLayout.tsx`
   - `supabase/config.toml`
   - `src/integrations/supabase/client.ts`
-- Files in log no longer in repo inventory: **1**
+- Files in log no longer in repo inventory: **5**
   - `src/App.tsx`
+  - `scripts/generate-reports.mjs`
+  - `src/lib/self-monitoring.ts`
+  - `src/components/SelfMonitoringPanel.tsx`
+  - `public/reports/manifest.json`
 
 ## LLM Gateway
 - Backbone: `google/gemini-3-flash-preview`

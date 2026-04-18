@@ -1,20 +1,20 @@
 {
-  "generatedAt": "2026-04-18T02:30:26.087Z",
+  "generatedAt": "2026-04-18T02:32:04.089Z",
   "files": [
     {
       "name": "health-report.md",
-      "bytes": 755,
-      "sha256": "f6d6b0285f2fe577"
+      "bytes": 903,
+      "sha256": "99a56901bf1f3a5f"
     },
     {
       "name": "implementation-log.csv",
-      "bytes": 6272,
-      "sha256": "89165e0d36cf51bb"
+      "bytes": 7183,
+      "sha256": "aaf21ae79ef3ce50"
     },
     {
       "name": "implementation-log.json",
-      "bytes": 8537,
-      "sha256": "842cb6e06a631f9d"
+      "bytes": 9679,
+      "sha256": "9400180d236d8213"
     },
     {
       "name": "llm-call-sites.csv",
@@ -38,32 +38,32 @@
     },
     {
       "name": "technical-report.docx",
-      "bytes": 13065,
-      "sha256": "65df9cba3f12e113"
+      "bytes": 13421,
+      "sha256": "e3bae6863bf2b4fb"
     },
     {
       "name": "technical-report.md",
-      "bytes": 11267,
-      "sha256": "d3dbfe9f8fdc1dce"
+      "bytes": 11985,
+      "sha256": "72ea85f21a8b1773"
     },
     {
       "name": "white-paper.docx",
-      "bytes": 10125,
-      "sha256": "296fd3e77c99b112"
+      "bytes": 10126,
+      "sha256": "986f4190568f1871"
     },
     {
       "name": "white-paper.md",
       "bytes": 3744,
-      "sha256": "17cf85884470d9de"
+      "sha256": "ff35b7a955153ad2"
     }
   ],
   "stats": {
-    "logEntries": 11,
+    "logEntries": 12,
     "repoFiles": 23,
     "llmCallSites": 7,
     "undocumentedFiles": 6,
-    "staleLogEntries": 1,
-    "latestVersion": "2.1.0",
+    "staleLogEntries": 5,
+    "latestVersion": "2.2.0",
     "latestDate": "2026-04-18"
   }
 }

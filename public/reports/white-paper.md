@@ -51,7 +51,7 @@ Live runner: `supabase/functions/experiment-runner` invokes the LLM and computes
 
 ## 4. Self-Monitoring Mechanism
 
-Every change is recorded in a versioned Implementation Log (currently 11 entries) synchronized
+Every change is recorded in a versioned Implementation Log (currently 12 entries) synchronized
 to GitHub. A repository inventory enumerates 23 files with their LLM role and research-chapter
 mapping. 7 verified LLM call-sites are catalogued, and a live probe button on the dashboard
 measures gateway round-trip latency. This Technical Report, this White Paper, and CSV/JSON inventory tables are
