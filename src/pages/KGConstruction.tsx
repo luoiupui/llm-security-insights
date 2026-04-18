@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle, DownloadCloud } from "lucide-react";
+import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle, DownloadCloud, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -160,10 +160,15 @@ export default function KGConstruction() {
               {ingesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
               Refresh KB (MITRE ATT&amp;CK + CISA KEV)
             </Button>
+            <Button onClick={handleBootstrapCorpus} disabled={bootstrapping} variant="outline" className="gap-2">
+              {bootstrapping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Bootstrap GraphRAG Corpus (CISA advisories)
+            </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Extract runs Layers B+C (RAG/GraphRAG) → LLM extraction → Layer A (KB grounding) → persists to KG so GraphRAG warms up across runs.
-            "Refresh KB" pulls ~700 MITRE techniques + ~1100 CISA KEV CVEs into <code className="font-mono">kb_entries</code>.
+            <strong>Extract</strong> runs Layers B+C (RAG/GraphRAG) → LLM extraction → Layer A (KB grounding) → persists to KG.
+            <strong> Refresh KB</strong> updates Layer A ground truth (~700 MITRE + ~1100 CVEs in <code className="font-mono">kb_entries</code>).
+            <strong> Bootstrap</strong> seeds Layer B+C corpus by running 25 recent CISA advisories through the full pipeline (solves cold-start). Layer A is never touched by Bootstrap.
           </p>
         </CardContent>
       </Card>
