@@ -66,7 +66,8 @@ A representative result from the live runner (Stage 1, sample `kev-001`):
 | Metric | LLM Zero-Shot | Rule-Based | Ours (LLM+KG+RAG) |
 |---|---:|---:|---:|
 | Entity accuracy w/ Layer A KB | 84.1% | 88.2% | **96.2%** |
-| False relation rate | 9.6% | 8.3% | **2.1%** |
+| False entity rate | 9.6% | 8.3% | **2.1%** |
+| False relation rate | 14.2% | 11.7% | **3.1%** |
 | False causal chain rate | 11.4% | n/a | **3.8%** |
 | Confidence calibration (ECE↓) | 0.18 | 0.15 | **0.06** |
 | STIX compliance rate | 71% | 82% | **96%** |
