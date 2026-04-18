@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { repoInventory, LLM_CALL_SITES, getRepoStats, type RepoFile } from "@/lib/github-sync";
 import { SelfMonitoringPanel } from "@/components/SelfMonitoringPanel";
+import { MonitoringEvents } from "@/components/MonitoringEvents";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
