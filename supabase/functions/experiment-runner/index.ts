@@ -183,8 +183,8 @@ function simulateRuleBased(text: string, groundTruth: any) {
 
 /* ── Metric Computation ── */
 function computeMetrics(predicted: any, groundTruth: any, task: string) {
-  const gtEntities = new Set((groundTruth.entities || []).map((e: any) => e.name.toLowerCase()));
-  const predEntities = new Set((predicted.entities || []).map((e: any) => e.name.toLowerCase()));
+  const gtEntities = new Set((groundTruth.entities || []).filter((e: any) => e?.name).map((e: any) => String(e.name).toLowerCase()));
+  const predEntities = new Set((predicted.entities || []).filter((e: any) => e?.name).map((e: any) => String(e.name).toLowerCase()));
 
   const tp = [...predEntities].filter((e) => gtEntities.has(e)).length;
   const precision = predEntities.size > 0 ? tp / predEntities.size : 0;
