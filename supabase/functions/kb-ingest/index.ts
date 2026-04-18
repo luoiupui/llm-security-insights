@@ -64,6 +64,32 @@ async function ingestMitre(): Promise<Row[]> {
           tactics: (obj.kill_chain_phases ?? []).map((k: any) => k.phase_name),
         },
       });
+    } else if (obj.type === "intrusion-set" && /^G\d{4}$/.test(id)) {
+      // MITRE Groups (APT actors) — needed for attribution validation in smoke test.
+      const aliases: string[] = Array.isArray(obj.aliases)
+        ? obj.aliases.filter((a: string) => a && a !== obj.name)
+        : [];
+      rows.push({
+        kb_type: "mitre_group",
+        external_id: id,
+        name: obj.name,
+        description: obj.description?.slice(0, 1000) ?? null,
+        metadata: {
+          stix_id: obj.id,
+          aliases,
+          country: obj.x_mitre_contributors ?? null,
+        },
+      });
+      // Also index every alias as its own searchable row so "Cozy Bear" → APT29 resolves.
+      for (const alias of aliases) {
+        rows.push({
+          kb_type: "mitre_group_alias",
+          external_id: `${id}:${alias.replace(/\s+/g, "_")}`,
+          name: alias,
+          description: `Alias for ${obj.name} (${id})`,
+          metadata: { stix_id: obj.id, group_id: id, canonical_name: obj.name },
+        });
+      }
     }
   }
   return rows;

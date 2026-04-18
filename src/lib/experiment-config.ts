@@ -144,95 +144,11 @@ export const experimentTasks: ExperimentTask[] = [
   },
 ];
 
-/* ── Sample Test Cases (MITRE ATT&CK) ── */
-
-export interface TestSample {
-  id: string;
-  datasetId: string;
-  text: string;
-  groundTruth: {
-    entities: { name: string; type: string }[];
-    relations: { source: string; relation: string; target: string }[];
-    causalLinks?: { cause: string; effect: string; type: string }[];
-  };
-}
-
-export const sampleTestCases: TestSample[] = [
-  {
-    id: "attack-001",
-    datasetId: "mitre-attack",
-    text: "APT28 (Fancy Bear) used X-Agent malware with keylogging capabilities to exfiltrate credentials from government networks. The attack leveraged CVE-2017-0199 in Microsoft Office to deliver the initial payload via spearphishing attachments.",
-    groundTruth: {
-      entities: [
-        { name: "APT28", type: "threat_actor" },
-        { name: "Fancy Bear", type: "threat_actor" },
-        { name: "X-Agent", type: "malware" },
-        { name: "CVE-2017-0199", type: "vulnerability" },
-        { name: "Microsoft Office", type: "software" },
-      ],
-      relations: [
-        { source: "APT28", relation: "uses", target: "X-Agent" },
-        { source: "APT28", relation: "also_known_as", target: "Fancy Bear" },
-        { source: "X-Agent", relation: "exploits", target: "CVE-2017-0199" },
-        { source: "CVE-2017-0199", relation: "affects", target: "Microsoft Office" },
-      ],
-      causalLinks: [
-        { cause: "spearphishing attachment", effect: "CVE-2017-0199 exploitation", type: "triggers" },
-        { cause: "CVE-2017-0199 exploitation", effect: "X-Agent deployment", type: "enables" },
-        { cause: "X-Agent deployment", effect: "credential exfiltration", type: "leads_to" },
-      ],
-    },
-  },
-  {
-    id: "attack-002",
-    datasetId: "mitre-attack",
-    text: "Lazarus Group deployed DTrack backdoor targeting Indian financial institutions. The attack chain started with watering hole compromises using CVE-2021-26855 (ProxyLogon) to gain initial access to Exchange servers, followed by lateral movement using PsExec.",
-    groundTruth: {
-      entities: [
-        { name: "Lazarus Group", type: "threat_actor" },
-        { name: "DTrack", type: "malware" },
-        { name: "CVE-2021-26855", type: "vulnerability" },
-        { name: "ProxyLogon", type: "vulnerability" },
-        { name: "PsExec", type: "software" },
-        { name: "Exchange", type: "software" },
-      ],
-      relations: [
-        { source: "Lazarus Group", relation: "uses", target: "DTrack" },
-        { source: "Lazarus Group", relation: "exploits", target: "CVE-2021-26855" },
-        { source: "CVE-2021-26855", relation: "also_known_as", target: "ProxyLogon" },
-        { source: "CVE-2021-26855", relation: "affects", target: "Exchange" },
-      ],
-      causalLinks: [
-        { cause: "watering hole compromise", effect: "ProxyLogon exploitation", type: "triggers" },
-        { cause: "ProxyLogon exploitation", effect: "Exchange server access", type: "enables" },
-        { cause: "Exchange server access", effect: "lateral movement via PsExec", type: "leads_to" },
-        { cause: "lateral movement", effect: "DTrack deployment", type: "leads_to" },
-      ],
-    },
-  },
-  {
-    id: "capec-001",
-    datasetId: "mitre-capec",
-    text: "The attacker performed SQL injection (CAPEC-66) against the web application's login form to bypass authentication. After gaining access, they escalated privileges through improper authorization checks (CAPEC-122) and installed a web shell for persistent access.",
-    groundTruth: {
-      entities: [
-        { name: "SQL Injection", type: "ttp" },
-        { name: "CAPEC-66", type: "ttp" },
-        { name: "CAPEC-122", type: "ttp" },
-        { name: "web shell", type: "malware" },
-      ],
-      relations: [
-        { source: "SQL Injection", relation: "mapped_to", target: "CAPEC-66" },
-        { source: "CAPEC-66", relation: "precedes", target: "CAPEC-122" },
-      ],
-      causalLinks: [
-        { cause: "SQL injection on login form", effect: "authentication bypass", type: "enables" },
-        { cause: "authentication bypass", effect: "privilege escalation", type: "leads_to" },
-        { cause: "privilege escalation", effect: "web shell installation", type: "enables" },
-      ],
-    },
-  },
-];
+/* ── Sample Test Cases ──
+ * Re-exported from src/lib/test-corpus.ts (30 hand-curated real cases).
+ * Kept as re-export for backward compatibility with existing imports.
+ */
+export { sampleTestCases, corpusStats, type TestSample } from "./test-corpus";
 
 /* ── Experiment Result Types ── */
 
