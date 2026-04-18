@@ -312,6 +312,29 @@ export const implementationLog: LogEntry[] = [
       "src/lib/implementation-log.ts",
     ],
   },
+  {
+    version: "2.3.0",
+    date: "2026-04-18",
+    title: "Hallucination evaluation task wired end-to-end (Ch. 5.5)",
+    category: "llm",
+    impact: "minor",
+    changes: [
+      "experiment-runner now branches on task='hallucination': runs ours / llm-zeroshot / rule-based on the same sample, validates every emitted MITRE/CVE/CAPEC ID against Layer A kb_entries, and computes per-system false_entity_rate, false_relation_rate, hallucinated_ids count, and kb_grounding_accuracy.",
+      "New 'Run Hallucination Eval' button on Experiments → Hallucination tab; renders measured rates per system, sample false entities/relations, and a per-system root-cause analysis card (why each system hallucinated).",
+      "Every hallucination evaluation is appended to monitoring_events as a 'hallucination_eval' event under category='experiment', with full structured metadata: per-system rates, raw findings (kb-validate output), root-cause analysis, and the recorded reduction-strategy rationale (Layer A/B/C, 8-step CoT, symbolic conflict engine, confidence calibration). Visible on Threat Feed and Implementation Log pages.",
+      "Root-cause heuristics implemented in-function (no extra LLM call): fabricated-MITRE-ID detection via Layer A, predicate over-generation (high false-relation rate), entity over-generation (high false-entity rate), rule-based co-occurrence noise, vanilla-prompt ontology absence.",
+      "Reduction-strategy text persisted in every event payload so the 'why it works' analysis is auditable from the database, not only from documentation.",
+    ],
+    knownGaps: [
+      "Eval currently runs on a single sample (sampleTestCases[0]); aggregation across the full ATT&CK/CAPEC/NVD/STIX evaluation set is the natural next step (loop + average).",
+      "Confidence-calibration metric (ECE) is shown as a static reference value in the comparison table but is not yet recomputed live per run — needs predicted-confidence vs correctness binning over a multi-sample batch.",
+    ],
+    filesModified: [
+      "supabase/functions/experiment-runner/index.ts",
+      "src/pages/Experiments.tsx",
+      "src/lib/implementation-log.ts",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
