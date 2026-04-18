@@ -296,6 +296,7 @@ export default function Experiments() {
           <TabsTrigger value="scale">Scale Effect</TabsTrigger>
           <TabsTrigger value="hallucination">Hallucination Ctrl</TabsTrigger>
           <TabsTrigger value="live">Live Run</TabsTrigger>
+          <TabsTrigger value="smoke">Smoke Test (n=30)</TabsTrigger>
         </TabsList>
 
         {/* ── System Comparison ── */}
