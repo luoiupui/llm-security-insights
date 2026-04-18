@@ -11,6 +11,7 @@ export interface LogEntry {
   changes: string[];
   filesModified: string[];
   impact: "major" | "minor" | "patch";
+  knownGaps?: string[];
 }
 
 export const implementationLog: LogEntry[] = [

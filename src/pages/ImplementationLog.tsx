@@ -146,6 +146,19 @@ export default function ImplementationLog() {
                         ))}
                       </ul>
                     </div>
+                    {entry.knownGaps && entry.knownGaps.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-destructive mb-1">Known Gaps / Feedback</p>
+                        <ul className="space-y-1">
+                          {entry.knownGaps.map((g, gi) => (
+                            <li key={gi} className="text-xs text-foreground/80 flex gap-2">
+                              <span className="text-destructive mt-0.5">⚠</span>
+                              <span>{g}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground mb-1">Files Modified</p>
                       <div className="flex flex-wrap gap-1">
