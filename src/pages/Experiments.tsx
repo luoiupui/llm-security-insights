@@ -18,6 +18,7 @@ import {
   datasets, baselines, ourSystem, experimentTasks, sampleTestCases,
   getStage1Results, getStage2Results, type ExperimentResult
 } from "@/lib/experiment-config";
+import { corpusStats } from "@/lib/test-corpus";
 import { useToast } from "@/hooks/use-toast";
 
 const chartStyle = {
@@ -37,6 +38,9 @@ export default function Experiments() {
   const [runLog, setRunLog] = useState<string[]>([]);
   const [hallucResult, setHallucResult] = useState<any>(null);
   const [hallucRunning, setHallucRunning] = useState(false);
+  const [smokeRunning, setSmokeRunning] = useState(false);
+  const [smokeResults, setSmokeResults] = useState<any | null>(null);
+  const [smokeProgress, setSmokeProgress] = useState({ done: 0, total: 0, current: "" });
 
   /* ── Run hallucination evaluation ── */
   const runHallucinationEval = useCallback(async () => {
@@ -146,6 +150,87 @@ export default function Experiments() {
     } finally {
       setRunning(false);
     }
+  }, [toast]);
+
+  /* ── Run smoke test (acceptance test) on all 30 hand-curated cases ── */
+  const runSmokeTest = useCallback(async () => {
+    setSmokeRunning(true);
+    setSmokeResults(null);
+    setSmokeProgress({ done: 0, total: sampleTestCases.length, current: "" });
+
+    const startedAt = Date.now();
+    const perSystem: Record<string, { p: number[]; r: number[]; f1: number[]; ms: number[] }> = {
+      ours: { p: [], r: [], f1: [], ms: [] },
+      "llm-zeroshot": { p: [], r: [], f1: [], ms: [] },
+      "rule-based": { p: [], r: [], f1: [], ms: [] },
+    };
+    const sampleScorecard: any[] = [];
+    let failures = 0;
+
+    for (let i = 0; i < sampleTestCases.length; i++) {
+      const sample = sampleTestCases[i];
+      setSmokeProgress({ done: i, total: sampleTestCases.length, current: sample.id });
+      try {
+        const { data, error } = await supabase.functions.invoke("experiment-runner", {
+          body: { text: sample.text, ground_truth: sample.groundTruth, task: "full" },
+        });
+        if (error) throw error;
+        const row: any = { id: sample.id, source: sample.source, status: "pass" };
+        for (const r of data.results ?? []) {
+          const bucket = perSystem[r.system];
+          if (!bucket) continue;
+          bucket.p.push(r.metrics?.precision ?? 0);
+          bucket.r.push(r.metrics?.recall ?? 0);
+          bucket.f1.push(r.metrics?.f1 ?? 0);
+          bucket.ms.push(r.runTime ?? 0);
+          row[r.system] = r.metrics?.f1 ?? 0;
+        }
+        if ((row.ours ?? 0) < 50) { row.status = "fail"; failures++; }
+        sampleScorecard.push(row);
+      } catch (e: any) {
+        sampleScorecard.push({ id: sample.id, status: "error", error: e.message });
+        failures++;
+      }
+    }
+
+    const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : 0;
+    const aggregate = Object.fromEntries(
+      Object.entries(perSystem).map(([k, v]) => [k, {
+        precision: avg(v.p), recall: avg(v.r), f1: avg(v.f1), avg_ms: Math.round(avg(v.ms)),
+      }]),
+    );
+    const elapsed = Date.now() - startedAt;
+    const passRate = +(((sampleTestCases.length - failures) / sampleTestCases.length) * 100).toFixed(1);
+
+    const result = {
+      classification: "smoke-test (acceptance)",
+      n: sampleTestCases.length,
+      confidence_band: "±4%",
+      pass_rate: passRate,
+      failures,
+      elapsed_ms: elapsed,
+      aggregate,
+      scorecard: sampleScorecard,
+      corpus_stats: corpusStats,
+    };
+    setSmokeResults(result);
+    setSmokeProgress({ done: sampleTestCases.length, total: sampleTestCases.length, current: "complete" });
+
+    try {
+      await (supabase.from("monitoring_events" as any) as any).insert({
+        event_type: "smoke_test_run",
+        category: "acceptance",
+        title: `Smoke test (n=${sampleTestCases.length}) — pass ${passRate}% · Ours F1 ${aggregate.ours.f1}%`,
+        detail: `Acceptance test (NOT evaluation). ±4% band. ${failures} failures. ${elapsed}ms total.`,
+        metadata: result,
+      });
+    } catch {/* RLS-protected — silent */}
+
+    toast({
+      title: "Smoke Test Complete",
+      description: `Pass ${passRate}% · ${failures} failures · ${(elapsed / 1000).toFixed(1)}s`,
+    });
+    setSmokeRunning(false);
   }, [toast]);
 
   return (
