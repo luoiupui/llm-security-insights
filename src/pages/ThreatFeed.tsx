@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Shield, ExternalLink, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { MonitoringEvents } from "@/components/MonitoringEvents";
 
 const threats = [
   { id: "CVE-2024-3400", severity: "critical", title: "Palo Alto PAN-OS Command Injection", source: "NVD", time: "1h ago", score: 10.0 },
