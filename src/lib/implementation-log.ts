@@ -361,6 +361,31 @@ export const implementationLog: LogEntry[] = [
       "src/lib/implementation-log.ts",
     ],
   },
+  {
+    version: "2.5.0",
+    date: "2026-04-18",
+    title: "Full 6-layer System Test (acceptance) + academic experiment report",
+    category: "pipeline",
+    impact: "minor",
+    changes: [
+      "New src/lib/system-test.ts orchestrator chains every test case through the full 6-layer pipeline: L1 threat-preprocess → L2 threat-rag → L3 threat-extract → L4 kb-validate → L5 threat-conflicts → L6 in-process attribution path-weight Π(conf_edge). Each layer has an explicit, named pass criterion (preprocess ≥1 IOC/sentence, RAG context block returned, extract ≥2 entities, KB hallucination rate ≤30%, conflicts ≥6/10 symbolic rules pass, attribution path weight ≥0.1).",
+      "New /experiments → 'System Test' tab with sample-size selector (n=5 / 10 / 30), live per-layer pipeline diagram that highlights the layer currently executing, per-layer aggregate pass/latency, and a per-case × per-layer pass/fail scorecard with hover-tooltips showing the layer's detail string (counts, hallucination %, rules-passed, path weight).",
+      "Each system-test run logs a 'system_test_run' monitoring event under category='acceptance' with full per-layer/per-case payload in metadata. The output is explicitly labelled 'system-test (acceptance)' — never 'evaluation'. Confidence band displayed alongside results: ±4% at n=30, ±~6% at n=10, ±~9% at n=5.",
+      "Generated public/reports/experiments-academic-report.md and .pdf — a discussion-style technical report covering all experimental work (smoke test, hallucination evaluation, system test, dataset realism, results discussion, threats to validity, future work) in academic prose suitable for a thesis chapter draft.",
+    ],
+    knownGaps: [
+      "System test is sequential per case (~20s per case end-to-end at n=30 ≈ 10 minutes) because it issues 4 separate LLM calls per case via the AI gateway. Future work: parallelise across 3 concurrent cases.",
+      "Attribution layer is computed in-process from the extracted graph rather than calling a dedicated attribution edge function. A graph-path search service (with hub/authority/bridge ranking) would harden attribution but the in-process Π(conf_edge) suffices for acceptance.",
+      "Pass thresholds are conservative acceptance criteria, not benchmark targets. They confirm the pipeline functions end-to-end on real data, but do not establish state-of-the-art performance.",
+    ],
+    filesModified: [
+      "src/lib/system-test.ts",
+      "src/pages/Experiments.tsx",
+      "src/lib/implementation-log.ts",
+      "public/reports/experiments-academic-report.md",
+      "public/reports/experiments-academic-report.pdf",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
