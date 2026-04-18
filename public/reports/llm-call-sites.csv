@@ -1,0 +1,8 @@
+file,functionName,purpose,model
+supabase/functions/threat-extract/index.ts,callGraphNativeLLM (graph-native CoT),Graph-native KG triple extraction inside the LLM reasoning chain,google/gemini-3-flash-preview
+supabase/functions/threat-extract/index.ts,callGraphNativeLLM (causal subgraph),Causal subgraph fusion (enables / leads_to / triggers / precedes),google/gemini-3-flash-preview
+supabase/functions/threat-conflicts/index.ts,resolveConflictsWithLLM,LLM-assisted resolution of symbolic conflict-rule violations,google/gemini-3-flash-preview
+supabase/functions/threat-kg-query/index.ts,performGraphAttribution,Path-weighted threat-actor attribution over the constructed KG,google/gemini-3-flash-preview
+supabase/functions/threat-kg-query/index.ts,reconstructGraphAttackPath,Attack-path reconstruction via topological reasoning,google/gemini-3-flash-preview
+supabase/functions/threat-kg-query/index.ts,predictFromGraph,Next-step prediction from current KG state,google/gemini-3-flash-preview
+supabase/functions/experiment-runner/index.ts,runLLMExtraction,Live LLM evaluation against ground-truth experiment samples,google/gemini-3-flash-preview
