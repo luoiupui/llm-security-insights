@@ -274,21 +274,24 @@ export default function Experiments() {
               Two-stage evaluation: MITRE ATT&CK + CAPEC → +NVD/CVE + STIX/TAXII
             </p>
           </div>
-          <div className="flex gap-2">
-            <Badge
-              variant={activeStage === 1 ? "default" : "outline"}
-              className="cursor-pointer"
-              onClick={() => setActiveStage(1)}
-            >
-              Stage 1: ATT&CK + CAPEC
-            </Badge>
-            <Badge
-              variant={activeStage === 2 ? "default" : "outline"}
-              className="cursor-pointer"
-              onClick={() => setActiveStage(2)}
-            >
-              Stage 2: + NVD + STIX
-            </Badge>
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <div className="flex gap-2">
+              <Badge
+                variant={activeStage === 1 ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => setActiveStage(1)}
+              >
+                Stage 1: ATT&CK + CAPEC
+              </Badge>
+              <Badge
+                variant={activeStage === 2 ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => setActiveStage(2)}
+              >
+                Stage 2: + NVD + STIX
+              </Badge>
+            </div>
+            <ReportDownloads />
           </div>
         </div>
       </motion.div>
