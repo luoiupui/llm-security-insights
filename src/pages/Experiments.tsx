@@ -2,8 +2,9 @@ import { motion } from "framer-motion";
 import { useState, useCallback } from "react";
 import {
   FlaskConical, Play, Database, BarChart3, TrendingUp,
-  Zap, CheckCircle2, Clock, AlertTriangle, Layers
+  Zap, CheckCircle2, Clock, AlertTriangle, Layers, Workflow, XCircle, MinusCircle
 } from "lucide-react";
+import { runSystemTest, SYSTEM_TEST_LAYERS, type SystemTestSummary } from "@/lib/system-test";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
