@@ -166,6 +166,9 @@ export default function GitHubSync() {
         )}
       </Card>
 
+      {/* Live timestamped events from KB validation, RAG retrieval, KG persistence, baselines */}
+      <MonitoringEvents limit={12} title="Live Pipeline Events (KB · RAG · GraphRAG · Baselines)" />
+
       {/* ── LLM call-site table ────────────────────────────────── */}
       <Card className="bg-card/50 border-border/50">
         <CardHeader className="pb-3">
