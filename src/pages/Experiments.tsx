@@ -424,7 +424,7 @@ export default function Experiments() {
                   <Card className="bg-card/50 border-border/50">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
-                        <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                        <AlertTriangle className="w-3 h-3 text-destructive" />
                         Root-cause analysis (why did each system hallucinate?)
                       </CardTitle>
                     </CardHeader>
