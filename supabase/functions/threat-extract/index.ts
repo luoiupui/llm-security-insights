@@ -134,7 +134,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, mode = "full", source_type = "report", source_reliability = 0.8 } = await req.json();
+    const { text, mode = "full", source_type = "report", source_reliability = 0.8, rag_context = "" } = await req.json();
 
     if (!text || typeof text !== "string" || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "Text input is required" }), {
@@ -160,9 +160,10 @@ serve(async (req) => {
       const graphResult = await callGraphNativeLLM(
         LOVABLE_API_KEY,
         GRAPH_NATIVE_COT_PROMPT,
-        buildGraphExtractionPrompt(text, source_type, source_reliability),
+        buildGraphExtractionPrompt(text, source_type, source_reliability, rag_context),
         "extract_knowledge_graph"
       );
+      results.rag_used = !!rag_context;
 
       // Decompose unified graph output into layer-compatible formats
       results.ner = {
@@ -222,12 +223,16 @@ ${text}`,
   }
 });
 
-function buildGraphExtractionPrompt(text: string, sourceType: string, reliability: number): string {
+function buildGraphExtractionPrompt(text: string, sourceType: string, reliability: number, ragContext: string = ""): string {
+  const contextSection = ragContext
+    ? `\n\n${ragContext}\n\nUse the historical context ONLY to (a) prefer canonical entity names already known, (b) ground your extraction in prior verified knowledge, (c) increase confidence for entities/relations that match prior events. Do NOT invent details that are not in the source text.\n`
+    : "";
+
   return `Construct a Knowledge Graph from the following ${sourceType} (source reliability: ${reliability}).
 
 IMPORTANT: Do NOT extract entities separately. Reason in graph triples from the start.
 Every entity you identify must immediately be connected to at least one other entity via an edge.
-
+${contextSection}
 SOURCE TEXT:
 ${text}
 

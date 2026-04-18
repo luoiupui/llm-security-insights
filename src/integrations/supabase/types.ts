@@ -14,13 +14,263 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      kb_entries: {
+        Row: {
+          created_at: string
+          description: string | null
+          external_id: string
+          id: string
+          kb_type: string
+          metadata: Json | null
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          external_id: string
+          id?: string
+          kb_type: string
+          metadata?: Json | null
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          external_id?: string
+          id?: string
+          kb_type?: string
+          metadata?: Json | null
+          name?: string
+        }
+        Relationships: []
+      }
+      kg_causal_links: {
+        Row: {
+          causal_type: string
+          cause: string
+          confidence: number | null
+          created_at: string
+          effect: string
+          evidence: string | null
+          id: string
+          mitre_tactic: string | null
+          report_id: string | null
+          temporal_order: number | null
+        }
+        Insert: {
+          causal_type: string
+          cause: string
+          confidence?: number | null
+          created_at?: string
+          effect: string
+          evidence?: string | null
+          id?: string
+          mitre_tactic?: string | null
+          report_id?: string | null
+          temporal_order?: number | null
+        }
+        Update: {
+          causal_type?: string
+          cause?: string
+          confidence?: number | null
+          created_at?: string
+          effect?: string
+          evidence?: string | null
+          id?: string
+          mitre_tactic?: string | null
+          report_id?: string | null
+          temporal_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kg_causal_links_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "threat_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kg_entities: {
+        Row: {
+          canonical_name: string
+          confidence: number | null
+          context: string | null
+          created_at: string
+          entity_type: string
+          id: string
+          mitre_id: string | null
+          name: string
+          report_id: string | null
+          stix_type: string | null
+        }
+        Insert: {
+          canonical_name: string
+          confidence?: number | null
+          context?: string | null
+          created_at?: string
+          entity_type: string
+          id?: string
+          mitre_id?: string | null
+          name: string
+          report_id?: string | null
+          stix_type?: string | null
+        }
+        Update: {
+          canonical_name?: string
+          confidence?: number | null
+          context?: string | null
+          created_at?: string
+          entity_type?: string
+          id?: string
+          mitre_id?: string | null
+          name?: string
+          report_id?: string | null
+          stix_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kg_entities_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "threat_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kg_relations: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          edge_type: string | null
+          evidence: string | null
+          id: string
+          relation: string
+          report_id: string | null
+          source_canonical: string
+          source_name: string
+          target_canonical: string
+          target_name: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          edge_type?: string | null
+          evidence?: string | null
+          id?: string
+          relation: string
+          report_id?: string | null
+          source_canonical: string
+          source_name: string
+          target_canonical: string
+          target_name: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          edge_type?: string | null
+          evidence?: string | null
+          id?: string
+          relation?: string
+          report_id?: string | null
+          source_canonical?: string
+          source_name?: string
+          target_canonical?: string
+          target_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kg_relations_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "threat_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monitoring_events: {
+        Row: {
+          category: string
+          created_at: string
+          detail: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          title: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          detail?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          title: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          detail?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          title?: string
+        }
+        Relationships: []
+      }
+      threat_reports: {
+        Row: {
+          created_at: string
+          embedding: string | null
+          extraction_payload: Json | null
+          id: string
+          source_text: string
+          source_type: string | null
+          summary: string | null
+        }
+        Insert: {
+          created_at?: string
+          embedding?: string | null
+          extraction_payload?: Json | null
+          id?: string
+          source_text: string
+          source_type?: string | null
+          summary?: string | null
+        }
+        Update: {
+          created_at?: string
+          embedding?: string | null
+          extraction_payload?: Json | null
+          id?: string
+          source_text?: string
+          source_type?: string | null
+          summary?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      fetch_subgraph: {
+        Args: { entity_names: string[]; max_hops?: number }
+        Returns: Json
+      }
+      match_threat_reports: {
+        Args: {
+          match_count?: number
+          query_embedding: string
+          similarity_threshold?: number
+        }
+        Returns: {
+          created_at: string
+          id: string
+          similarity: number
+          source_text: string
+          summary: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

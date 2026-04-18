@@ -257,6 +257,36 @@ export const implementationLog: LogEntry[] = [
       "public/reports/manifest.json",
     ],
   },
+  {
+    version: "3.0.0",
+    date: "2026-04-18",
+    title: "Steps 1.1–1.4 + 2.1–2.2: GraphRAG (Layers A+B+C) & Real Baselines",
+    category: "architecture",
+    impact: "major",
+    changes: [
+      "Step 1.1 — Pre-check: confirmed Layers A/B/C are non-breaking additions to the existing 4-layer pipeline (preprocess → extract → conflicts → query). RAG context is injected as an opt-in prompt section; persistence is a post-pipeline call.",
+      "Step 1.2 — Layer A (KB Grounding): new kb-validate edge function + kb_entries table seeded with 14 MITRE tactics, 8 techniques, 6 CVEs. Validates every mitre_id / cve_id / stix_type emitted by the LLM and flags hallucinated IDs deterministically (no LLM call).",
+      "Step 1.3 — Layer B (Vector RAG): pgvector enabled (extensions schema), threat_reports table with 768-dim embeddings, threat-rag edge function calls google/text-embedding-004, top-k retrieval via match_threat_reports() RPC, retrieved summaries injected into the extraction prompt.",
+      "Step 1.4 — Layer C (GraphRAG): kg_entities + kg_relations + kg_causal_links persistent tables, fetch_subgraph() RPC pulls neighbouring subgraphs around overlapping entities, persisted KGs feed back into future retrievals.",
+      "Step 2.1 — Real baselines: replaced simulated BERT/Rule baselines (Math.random) with real Gemini-zero-shot (vanilla 1-shot, no CoT) + real deterministic regex/dictionary extractor. Isolates the value of graph-native CoT vs vanilla LLM prompting.",
+      "Step 2.2 — Two-stage evaluation now tagged on every baseline_run event so Stage 1 (ATT&CK + CAPEC) vs Stage 2 (+NVD/STIX) measurements are auditable in monitoring_events.",
+      "Monitoring: new monitoring_events table — every kb_validation / rag_retrieval / kg_persisted / baseline_run is timestamped and surfaced on Threat Feed, Implementation Log, and GitHub Sync pages.",
+    ],
+    filesModified: [
+      "supabase/functions/kb-validate/index.ts",
+      "supabase/functions/threat-rag/index.ts",
+      "supabase/functions/threat-extract/index.ts",
+      "supabase/functions/experiment-runner/index.ts",
+      "src/lib/threat-pipeline.ts",
+      "src/hooks/use-threat-pipeline.ts",
+      "src/lib/experiment-config.ts",
+      "src/pages/Experiments.tsx",
+      "src/pages/ThreatFeed.tsx",
+      "src/pages/KGConstruction.tsx",
+      "src/lib/github-sync.ts",
+      "src/components/MonitoringEvents.tsx",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */

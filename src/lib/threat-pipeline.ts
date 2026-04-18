@@ -1,11 +1,13 @@
 /**
  * Threat Intelligence Pipeline Client
  * Graph-Native LLM Architecture (Innovation beyond OpenCTI)
- * 
+ *
  * Layer 1: Data Acquisition → threat-preprocess
- * Layer 2: Graph-Native LLM Extraction → threat-extract (KG built WITHIN reasoning)
- * Layer 3: KG Storage → in-memory temporal KG with graph_native structure
- * Layer 4: Graph-Aware Inference → threat-kg-query + threat-conflicts
+ * Layer B+C: Retrieval (Vector RAG + GraphRAG) → threat-rag (embed_and_retrieve)
+ * Layer 2: Graph-Native LLM Extraction (RAG-augmented) → threat-extract
+ * Layer A: Authoritative KB Grounding → kb-validate (deterministic)
+ * Layer 3+4: Conflict + Attribution → threat-conflicts + threat-kg-query
+ * Layer C persist: store KG for future retrieval → threat-rag (persist)
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -67,13 +69,8 @@ export interface PreprocessResult {
 }
 
 export interface ExtractionResult {
-  ner?: {
-    entities: ThreatEntity[];
-    narrative_summary?: string;
-  };
-  re?: {
-    relations: ThreatRelation[];
-  };
+  ner?: { entities: ThreatEntity[]; narrative_summary?: string };
+  re?: { relations: ThreatRelation[] };
   causality?: {
     causal_links: CausalLink[];
     attack_timeline?: { order: number; event: string; timestamp_mentioned?: string; certainty?: string }[];
@@ -85,6 +82,33 @@ export interface ExtractionResult {
   source_type: string;
   source_reliability: number;
   timestamp: string;
+  rag_used?: boolean;
+}
+
+export interface KBValidationFinding {
+  kind: "ok" | "hallucinated" | "malformed" | "non_canonical";
+  id_type: "mitre_technique" | "mitre_tactic" | "cve" | "stix_sdo" | "stix_sro" | "capec";
+  raw_value: string;
+  matched_name?: string | null;
+  suggestion?: string | null;
+  entity_name?: string;
+}
+
+export interface KBValidation {
+  findings: KBValidationFinding[];
+  summary: { total_checks: number; ok: number; hallucinated: number; malformed: number; non_canonical: number };
+  accuracy: number;
+  kb_size: number;
+}
+
+export interface RAGContext {
+  similar_reports: Array<{ id: string; source_text: string; summary: string; similarity: number; created_at: string }>;
+  subgraph: {
+    entities: Array<{ name: string; entity_type: string; mitre_id?: string }>;
+    relations: Array<{ source_name: string; target_name: string; relation: string }>;
+  };
+  context_block: string;
+  embedding_used: boolean;
 }
 
 export interface ConflictResult {
@@ -119,7 +143,7 @@ export interface AttributionResult {
   reasoning_trace?: string;
 }
 
-/* ── Layer 1: Data Acquisition & Preprocessing ── */
+/* ── Layer 1: Preprocess ── */
 
 export async function preprocessText(text: string, sourceType: string = "auto"): Promise<PreprocessResult> {
   const { data, error } = await supabase.functions.invoke("threat-preprocess", {
@@ -129,60 +153,90 @@ export async function preprocessText(text: string, sourceType: string = "auto"):
   return data;
 }
 
-/* ── Layer 2: Graph-Native LLM Extraction ── */
+/* ── Layer B+C: Retrieval (Vector RAG + GraphRAG) ── */
+
+export async function retrieveContext(text: string, topK: number = 3): Promise<RAGContext> {
+  const { data, error } = await supabase.functions.invoke("threat-rag", {
+    body: { mode: "embed_and_retrieve", text, top_k: topK, similarity_threshold: 0.4 },
+  });
+  if (error) throw new Error(`Retrieval failed: ${error.message}`);
+  return data;
+}
+
+export async function persistExtraction(
+  sourceText: string,
+  sourceType: string,
+  extraction: ExtractionResult,
+): Promise<{ report_id: string; persisted: boolean }> {
+  const { data, error } = await supabase.functions.invoke("threat-rag", {
+    body: { mode: "persist", source_text: sourceText, source_type: sourceType, extraction },
+  });
+  if (error) throw new Error(`Persist failed: ${error.message}`);
+  return data;
+}
+
+/* ── Layer 2: Graph-Native Extraction (with optional RAG context) ── */
 
 export async function extractThreats(
   text: string,
   mode: "full" | "ner" | "re" | "causality" = "full",
   sourceType: string = "report",
-  sourceReliability: number = 0.8
+  sourceReliability: number = 0.8,
+  ragContext: string = "",
 ): Promise<ExtractionResult> {
   const { data, error } = await supabase.functions.invoke("threat-extract", {
-    body: { text, mode, source_type: sourceType, source_reliability: sourceReliability },
+    body: { text, mode, source_type: sourceType, source_reliability: sourceReliability, rag_context: ragContext },
   });
   if (error) throw new Error(`Extraction failed: ${error.message}`);
   return data;
 }
 
-/* ── Layer 3+4: Graph-Integrated Conflict Detection ── */
+/* ── Layer A: Authoritative KB Validation (deterministic) ── */
+
+export async function validateAgainstKB(
+  entities: ThreatEntity[],
+  relations: ThreatRelation[],
+  causalLinks: CausalLink[],
+): Promise<KBValidation> {
+  const { data, error } = await supabase.functions.invoke("kb-validate", {
+    body: { entities, relations, causal_links: causalLinks },
+  });
+  if (error) throw new Error(`KB validation failed: ${error.message}`);
+  return data;
+}
+
+/* ── Layer 3+4: Conflict Detection ── */
 
 export async function detectConflicts(
   entities: ThreatEntity[],
   relations: ThreatRelation[],
   causalLinks: CausalLink[],
   sourceReliability: number = 0.8,
-  graphNative?: GraphNative
+  graphNative?: GraphNative,
 ): Promise<ConflictAnalysis> {
   const { data, error } = await supabase.functions.invoke("threat-conflicts", {
     body: {
-      entities,
-      relations,
-      causal_links: causalLinks,
-      source_reliability: sourceReliability,
-      graph_native: graphNative,
+      entities, relations, causal_links: causalLinks,
+      source_reliability: sourceReliability, graph_native: graphNative,
     },
   });
   if (error) throw new Error(`Conflict detection failed: ${error.message}`);
   return data;
 }
 
-/* ── Layer 4: Graph-Aware Attribution & Inference ── */
+/* ── Layer 4: Attribution ── */
 
 export async function performAttribution(
   query: string,
   entities: ThreatEntity[],
   relations: ThreatRelation[],
   causalLinks: CausalLink[],
-  graphNative?: GraphNative
+  graphNative?: GraphNative,
 ): Promise<AttributionResult> {
   const { data, error } = await supabase.functions.invoke("threat-kg-query", {
     body: {
-      query,
-      entities,
-      relations,
-      causal_links: causalLinks,
-      graph_native: graphNative,
-      mode: "attribute",
+      query, entities, relations, causal_links: causalLinks,
+      graph_native: graphNative, mode: "attribute",
     },
   });
   if (error) throw new Error(`Attribution failed: ${error.message}`);
@@ -193,60 +247,48 @@ export async function reconstructAttackPath(
   entities: ThreatEntity[],
   relations: ThreatRelation[],
   causalLinks: CausalLink[],
-  graphNative?: GraphNative
+  graphNative?: GraphNative,
 ): Promise<{ attack_path: string }> {
   const { data, error } = await supabase.functions.invoke("threat-kg-query", {
     body: {
-      entities,
-      relations,
-      causal_links: causalLinks,
-      graph_native: graphNative,
-      mode: "attack_path",
+      entities, relations, causal_links: causalLinks,
+      graph_native: graphNative, mode: "attack_path",
     },
   });
   if (error) throw new Error(`Attack path reconstruction failed: ${error.message}`);
   return data;
 }
 
-/* ── Full Pipeline: Preprocess → Graph-Native Extract → Conflicts → Attribute ── */
+/* ── Full RAG-Augmented Pipeline ── */
 
 export async function runFullPipeline(
   rawText: string,
   sourceType: string = "auto",
-  query: string = "Identify the threat actor and reconstruct the attack chain"
+  query: string = "Identify the threat actor and reconstruct the attack chain",
 ): Promise<{
   preprocessing: PreprocessResult;
+  rag: RAGContext;
   extraction: ExtractionResult;
+  kbValidation: KBValidation;
   conflicts: ConflictAnalysis;
   attribution: AttributionResult;
+  persistence: { report_id: string; persisted: boolean };
 }> {
-  // Layer 1: Preprocess
   const preprocessing = await preprocessText(rawText, sourceType);
-
-  // Layer 2: Graph-Native Extraction (KG built WITHIN LLM reasoning)
+  const rag = await retrieveContext(preprocessing.cleaned_text, 3);
   const extraction = await extractThreats(
-    preprocessing.cleaned_text,
-    "full",
-    preprocessing.source_type,
-    preprocessing.reliability_score
+    preprocessing.cleaned_text, "full", preprocessing.source_type,
+    preprocessing.reliability_score, rag.context_block,
   );
-
-  // Gather extracted data — including graph_native structure
   const entities = extraction.ner?.entities || [];
   const relations = extraction.re?.relations || [];
   const causalLinks = extraction.causality?.causal_links || [];
   const graphNative = extraction.graph_native;
 
-  // Layer 3+4: Graph-Integrated Conflict Detection
-  const conflicts = await detectConflicts(
-    entities, relations, causalLinks,
-    preprocessing.reliability_score, graphNative
-  );
+  const kbValidation = await validateAgainstKB(entities, relations, causalLinks);
+  const conflicts = await detectConflicts(entities, relations, causalLinks, preprocessing.reliability_score, graphNative);
+  const attribution = await performAttribution(query, entities, relations, causalLinks, graphNative);
+  const persistence = await persistExtraction(preprocessing.cleaned_text, preprocessing.source_type, extraction);
 
-  // Layer 4: Graph-Aware Attribution
-  const attribution = await performAttribution(
-    query, entities, relations, causalLinks, graphNative
-  );
-
-  return { preprocessing, extraction, conflicts, attribution };
+  return { preprocessing, rag, extraction, kbValidation, conflicts, attribution, persistence };
 }
