@@ -1,13 +1,15 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle, DownloadCloud } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
-import type { ThreatEntity, ThreatRelation } from "@/lib/threat-pipeline";
+import { persistExtraction, type ThreatEntity, type ThreatRelation } from "@/lib/threat-pipeline";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
   threat_actor: "bg-threat-critical/20 text-threat-critical",
@@ -31,6 +33,7 @@ const SAMPLE = `APT-29 used SUNBURST backdoor in the SolarWinds Orion supply cha
 
 export default function KGConstruction() {
   const [inputText, setInputText] = useState(SAMPLE);
+  const [ingesting, setIngesting] = useState(false);
   const pipeline = useThreatPipeline();
 
   const handleExtract = async () => {
@@ -43,13 +46,35 @@ export default function KGConstruction() {
       pre.cleaned_text, "full", pre.source_type, pre.reliability_score,
       rag?.context_block ?? "",
     );
+    if (!ext) return;
     // Layer A: deterministic KB grounding (MITRE/CVE/STIX)
-    if (ext) {
-      await pipeline.runKBValidation(
-        ext.ner?.entities || [],
-        ext.re?.relations || [],
-        ext.causality?.causal_links || [],
-      );
+    await pipeline.runKBValidation(
+      ext.ner?.entities || [],
+      ext.re?.relations || [],
+      ext.causality?.causal_links || [],
+    );
+    // Layer C cold-start fix: persist extraction so GraphRAG warms up
+    try {
+      const persisted = await persistExtraction(pre.cleaned_text, pre.source_type, ext);
+      toast.success(`GraphRAG warmed: persisted to KG (report ${persisted.report_id.slice(0, 8)}…)`);
+    } catch (e) {
+      toast.error(`KG persistence failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  };
+
+  const handleIngestKB = async () => {
+    setIngesting(true);
+    toast.info("Ingesting MITRE ATT&CK + CISA KEV — this may take 20–40s…");
+    try {
+      const { data, error } = await supabase.functions.invoke("kb-ingest", {
+        body: { sources: ["mitre", "kev"] },
+      });
+      if (error) throw error;
+      toast.success(`KB updated → ${data?.kb_size ?? "?"} canonical IDs (mitre=${data?.results?.mitre ?? 0}, kev=${data?.results?.kev ?? 0})`);
+    } catch (e) {
+      toast.error(`KB ingest failed: ${e instanceof Error ? e.message : "unknown"}`);
+    } finally {
+      setIngesting(false);
     }
   };
 
@@ -105,9 +130,19 @@ export default function KGConstruction() {
           <Textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
             placeholder="Paste threat intelligence text..."
             className="min-h-[80px] font-mono text-xs bg-secondary/30" />
-          <Button onClick={handleExtract} disabled={pipeline.isProcessing} className="gap-2">
-            <Play className="w-4 h-4" /> Extract & Build KG
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleExtract} disabled={pipeline.isProcessing} className="gap-2">
+              <Play className="w-4 h-4" /> Extract, Validate & Persist to KG
+            </Button>
+            <Button onClick={handleIngestKB} disabled={ingesting} variant="outline" className="gap-2">
+              {ingesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
+              Refresh KB (MITRE ATT&amp;CK + CISA KEV)
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Extract runs Layers B+C (RAG/GraphRAG) → LLM extraction → Layer A (KB grounding) → persists to KG so GraphRAG warms up across runs.
+            "Refresh KB" pulls ~700 MITRE techniques + ~1100 CISA KEV CVEs into <code className="font-mono">kb_entries</code>.
+          </p>
         </CardContent>
       </Card>
 

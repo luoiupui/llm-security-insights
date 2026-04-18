@@ -11,6 +11,7 @@ export interface LogEntry {
   changes: string[];
   filesModified: string[];
   impact: "major" | "minor" | "patch";
+  knownGaps?: string[];
 }
 
 export const implementationLog: LogEntry[] = [
@@ -285,6 +286,30 @@ export const implementationLog: LogEntry[] = [
       "src/pages/KGConstruction.tsx",
       "src/lib/github-sync.ts",
       "src/components/MonitoringEvents.tsx",
+    ],
+  },
+  {
+    version: "2.1.0",
+    date: "2026-04-18",
+    title: "Self-evolving GraphRAG: real KB ingest + Layer C cold-start fix",
+    category: "pipeline",
+    impact: "major",
+    changes: [
+      "New edge function kb-ingest: pulls MITRE ATT&CK Enterprise STIX bundle (mitre/cti GitHub) and CISA Known Exploited Vulnerabilities feed, upserts ~700 techniques/tactics + ~1100 CVEs into kb_entries. Replaces the 28-row seed so Layer A actually catches hallucinated MITRE IDs / CVEs.",
+      "KGConstruction 'Extract & Build KG' now also calls persistExtraction() at the end of every interactive run — every manual extraction warms GraphRAG (kg_entities + kg_relations + kg_causal_links), eliminating the cold-start where Layer C retrieval returned empty.",
+      "Added 'Refresh KB (MITRE + CISA KEV)' button on KG Construction page that triggers kb-ingest on demand and shows total canonical-ID count via toast.",
+      "Every kb-ingest run logs a kb_ingest event into monitoring_events with row counts, elapsed time, and any per-source errors — visible on Threat Feed / Implementation Log / GitHub Sync live event streams (timestamped).",
+      "Self-evolution loop: ingest → extract → validate → persist → next extraction retrieves richer context from the warmed KG; failures and KB gaps are now first-class observable events instead of silent.",
+    ],
+    knownGaps: [
+      "MITRE/KEV fetch depends on raw.githubusercontent.com + cisa.gov reachability from the edge runtime; if either 5xxs the function records the error in monitoring_events and partially succeeds.",
+      "kb-ingest does not yet pull NVD full CVE feed (only the ~1100 CISA KEV subset). Extending to the full NVD JSON dump would push kb_entries to ~250k rows — needs a streamed/paginated ingest.",
+      "STIX/TAXII collection ingest is still TODO — only MITRE STIX bundle is parsed today.",
+    ],
+    filesModified: [
+      "supabase/functions/kb-ingest/index.ts",
+      "src/pages/KGConstruction.tsx",
+      "src/lib/implementation-log.ts",
     ],
   },
 ];
