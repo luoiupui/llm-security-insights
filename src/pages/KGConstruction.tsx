@@ -81,17 +81,17 @@ export default function KGConstruction() {
 
   const handleBootstrapCorpus = async () => {
     setBootstrapping(true);
-    toast.info("Bootstrapping GraphRAG corpus from CISA KEV — ~2-4 min for 25 advisories…");
     try {
       const { data, error } = await supabase.functions.invoke("cisa-advisories-ingest", {
-        body: { limit: 25, skip_existing: true },
+        body: { limit: 10, skip_existing: true },
       });
       if (error) throw error;
       if (data?.ok === false) throw new Error(data.error || "ingest failed");
       toast.success(
-        `Bootstrap done → ${data?.succeeded ?? 0} advisories ingested. ` +
-        `Corpus: ${data?.corpus?.reports ?? 0} reports / ${data?.corpus?.entities ?? 0} entities. ` +
-        `Layer B+C is now warm.`,
+        `Bootstrap queued (${data?.limit ?? 10} advisories). ` +
+        `Running in background — watch the Threat Feed for cisa_bootstrap_progress events. ` +
+        `Layer B+C will be warm in ~1-2 min.`,
+        { duration: 8000 },
       );
     } catch (e) {
       toast.error(`Bootstrap failed: ${e instanceof Error ? e.message : "unknown"}`);
