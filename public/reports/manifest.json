@@ -1,6 +1,26 @@
 {
-  "generatedAt": "2026-04-18T02:32:04.089Z",
+  "generatedAt": "2026-04-23T22:00:00.000Z",
   "files": [
+    {
+      "name": "comprehensive-technical-report.md",
+      "bytes": 34049,
+      "sha256": "fb7b6c4d35e286cc"
+    },
+    {
+      "name": "comprehensive-technical-report.pdf",
+      "bytes": 73019,
+      "sha256": "a3609408bc63bcf5"
+    },
+    {
+      "name": "experiments-academic-report.md",
+      "bytes": 20538,
+      "sha256": "f389eb9eff6e9ddf"
+    },
+    {
+      "name": "experiments-academic-report.pdf",
+      "bytes": 29861,
+      "sha256": "73195ed637cb7b16"
+    },
     {
       "name": "health-report.md",
       "bytes": 903,
@@ -58,12 +78,12 @@
     }
   ],
   "stats": {
-    "logEntries": 12,
+    "logEntries": 17,
     "repoFiles": 23,
     "llmCallSites": 7,
     "undocumentedFiles": 6,
     "staleLogEntries": 5,
-    "latestVersion": "2.2.0",
-    "latestDate": "2026-04-18"
+    "latestVersion": "2.5.3",
+    "latestDate": "2026-04-23"
   }
 }
