@@ -421,6 +421,29 @@ export const implementationLog: LogEntry[] = [
       "package.json",
     ],
   },
+  {
+    version: "2.5.3",
+    date: "2026-04-23",
+    title: "Comprehensive long-form technical report (audit + analysis + discussion)",
+    category: "infrastructure",
+    impact: "minor",
+    changes: [
+      "Generated public/reports/comprehensive-technical-report.md (485 lines, ~34 KB — 2.8× longer than the auto-generated technical-report.md) covering: build-plan verification (16 milestones with code evidence), the seven loci where work is recorded beyond the Implementation Log panel (monitoring_events, public/reports/*, generate-reports.mjs, edge-function logs, knownGaps[] arrays, test-corpus annotations, github-sync inventory), edge-function inventory with pass criteria, dashboard panel map, database volumes, KB composition, smoke corpus provenance, all four experimental workflows, results (smoke + hallucination + system test + latency), analysis (4 mechanism subsections), discussion (validity threats × 3 + comparison + cost), known gaps (G-01..G-10), reproducibility checklist, conclusion, and 5 appendices including a glossary.",
+      "Rendered public/reports/comprehensive-technical-report.pdf (16 pages, 73 KB) via the same markdown→HTML→xhtml2pdf pipeline used for the academic report — navy headings, white-on-navy table headers, JetBrains-style code spans, page-N/16 footer. QA'd page-by-page with pypdfium2.",
+      "Updated public/reports/manifest.json to include the new long-form report alongside the existing experiments-academic-report; manifest now lists 15 artefacts so the 'Download All (ZIP)' button on /experiments automatically picks it up without code changes to ReportDownloads.tsx.",
+      "Audit findings recorded: build status complete through v2.5.2, every published milestone has executable code, 137 monitoring_events across 8 distinct event types, 2 844 KB entries (1 569 CVE + 691 MITRE technique + 172 group + 398 alias + 14 tactic), 191/193/97 entities/relations/causal-links in the live KG, 21 ingested reports.",
+    ],
+    knownGaps: [
+      "Long-form report cites smoke-test pass-rate of 27/30 and hallucination reductions of ~4.5× from the most recent two evaluation runs; values will drift as the corpus is rerun. A future improvement is to pull these numbers live from monitoring_events at report-generation time rather than embedding indicative values.",
+      "PDF table-of-contents is not interactive (xhtml2pdf does not generate PDF outlines); next iteration could swap to weasyprint for clickable bookmarks.",
+    ],
+    filesModified: [
+      "public/reports/comprehensive-technical-report.md",
+      "public/reports/comprehensive-technical-report.pdf",
+      "public/reports/manifest.json",
+      "src/lib/implementation-log.ts",
+    ],
+  },
 ];
 
 /** Get log entries filtered by category */
