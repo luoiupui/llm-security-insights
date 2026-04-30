@@ -39,6 +39,37 @@ The 30 evaluation cases (file `src/lib/test-corpus.ts`) deserve particular comme
 
 Although every case is anchored in real material, the corpus is *small*. With n=30 the binomial confidence band on a 90% pass rate is approximately ±4 percentage points; this is adequate for acceptance testing but insufficient for thesis-defendable claims of state-of-the-art performance. We are explicit about this throughout.
 
+### 2.1 Knowledge-Graph Construction Flow and Corpus Usage
+
+A recurring source of confusion when reading the experimental tables below is *when, exactly, the knowledge graph comes into existence*. The pipeline is strictly sequential and the persisted KG only materialises after the final step. Steps 1–6 produce an **in-memory** graph that is rendered immediately in the UI for inspection; step 7 then writes the validated entities, relations and causal links to the durable tables `kg_entities`, `kg_relations` and `kg_causal_links`, at which point the KG becomes queryable by *future* runs (it is read back as Layer C / GraphRAG context during step 2 of the next invocation). All four experimental units in this report drive the same pipeline; they differ only in which subset of stages they exercise and in which artefact is measured.
+
+```text
+Input text  (1 of 30 corpus cases  OR  live CISA feed  OR  pasted IOC report)
+        |
+        v
+[1] Preprocess     -> defang, IOC extraction, source-reliability score
+[2] RAG Retrieval  -> Vector RAG (pgvector) + GraphRAG subgraph from prior KG
+[3] LLM Extract    -> 8-step Graph-Native CoT  (in-memory KG produced here)
+[4] KB-Validate    -> deterministic check vs 2,844 MITRE / CVE / STIX entries
+[5] Conflicts      -> ten neuro-symbolic rules + credibility scoring
+[6] KG-Query       -> attribution / attack-path reconstruction
+[7] Persist        -> writes kg_entities, kg_relations, kg_causal_links
+                     (this is the durable KG; feeds step 2 of the next run)
+```
+
+The n=30 corpus introduced in §2 is the **shared input substrate** for every experimental unit reported below. The mapping between unit and pipeline stages is summarised in Table 2.1.
+
+**Table 2.1 — How each experimental unit consumes the n=30 corpus.**
+
+| Experimental unit | Corpus role | Pipeline stages exercised | Metric reported |
+|---|---|---|---|
+| Hallucination-Control Evaluation (§4) | 30 inputs streamed through extraction, then checked at step 4 | 1 → 4 | hallucinated-ID rate (per system, per case) |
+| Comparative Smoke Test (§5) | 30 inputs scored against gold labels in `test-corpus.ts` | 1 → 3, repeated per system (Ours / Zero-Shot / Rule-Based / BERT-NER / SpaCy-NER) | NER and RE micro-F1 |
+| Full Six-Layer System Test (§6) | 30 inputs drive the full pipeline; resulting subgraphs become the case studies | 1 → 7 (Ours only) | per-layer pass rate, qualitative case studies |
+| Ablation Study (§7 / §8) | Same 30 inputs replayed with individual components disabled | 1 → 7 with KB-grounding, CoT, or symbolic rules toggled off | delta in F1 and hallucination rate vs full system |
+
+Because the input substrate is identical across the four units, the numbers reported in §4–§8 are directly comparable: a delta between the smoke test (§5) and the ablation arms (§8) attributable to a single toggled component cannot be explained by a change of corpus. This is the principal reason a small but tightly controlled n=30 acceptance corpus is preferred here over a larger but heterogeneous benchmark.
+
 ## 3. Systems Compared and Metric Definitions
 
 **Three systems** are evaluated head-to-head across all experiments:
