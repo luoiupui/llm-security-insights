@@ -1,15 +1,22 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Network, Tag, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle, DownloadCloud, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  Network, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle,
+  DownloadCloud, Sparkles, FileText, FlaskConical, Rss, Upload, Plug,
+  LayoutDashboard, Crosshair, RefreshCw, GitBranch, Workflow, Gauge, Share2, Brain,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
 import { persistExtraction, type ThreatEntity, type ThreatRelation } from "@/lib/threat-pipeline";
 import { supabase } from "@/integrations/supabase/client";
 import { CorpusHealth } from "@/components/CorpusHealth";
+import { sampleTestCases } from "@/lib/test-corpus";
 import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
@@ -32,30 +39,81 @@ const nodeColorMap: Record<string, string> = {
 
 const SAMPLE = `APT-29 used SUNBURST backdoor in the SolarWinds Orion supply chain attack (T1195.002). SUNBURST exploited CVE-2020-10148 and communicated via avsvmcloud[.]com (185.225.69.24). TEARDROP dropper implemented T1071.001 for C2. APT-29 also used RAINDROP loader targeting Microsoft Exchange.`;
 
+interface FeedRow { id: string; source_text: string; created_at: string; source_type: string | null }
+
+interface ConsumerCard {
+  name: string;
+  desc: string;
+  icon: React.ComponentType<{ className?: string }>;
+  status: "active" | "reserved";
+  to?: string;
+}
+
+const DOWNSTREAM_CONSUMERS: ConsumerCard[] = [
+  { name: "Dashboard review", desc: "Human analyst inspection of nodes, edges and causal links.", icon: LayoutDashboard, status: "active", to: "/" },
+  { name: "Attribution engine", desc: "Graph-aware actor attribution via threat-kg-query.", icon: Crosshair, status: "active", to: "/attribution" },
+  { name: "GraphRAG warm-up", desc: "Persisted KG becomes step-2 retrieval context for the next pipeline run.", icon: RefreshCw, status: "active" },
+  { name: "Conflict & credibility scoring", desc: "Neuro-symbolic rules consume entities, relations and edges.", icon: GitBranch, status: "active" },
+  { name: "Automated response playbooks", desc: "Reserved — future SOAR hand-off (block IOC, isolate host).", icon: Workflow, status: "reserved" },
+  { name: "Risk scoring & decision support", desc: "Reserved — analyst-assist for prioritisation and triage.", icon: Gauge, status: "reserved" },
+  { name: "STIX 2.1 export to SIEM", desc: "Reserved — future bundle export endpoint for downstream tooling.", icon: Share2, status: "reserved" },
+  { name: "ML feedback loop", desc: "Reserved — training signal for embedding fine-tune and re-ranking.", icon: Brain, status: "reserved" },
+];
+
 export default function KGConstruction() {
   const [inputText, setInputText] = useState(SAMPLE);
+  const [activeSource, setActiveSource] = useState("paste");
+  const [selectedCaseId, setSelectedCaseId] = useState<string>("");
+  const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
   const pipeline = useThreatPipeline();
 
+  // Lazy-load the live feed when user opens the tab
+  useEffect(() => {
+    if (activeSource !== "feed" || feedRows.length > 0) return;
+    setFeedLoading(true);
+    supabase
+      .from("threat_reports")
+      .select("id,source_text,created_at,source_type")
+      .order("created_at", { ascending: false })
+      .limit(5)
+      .then(({ data, error }) => {
+        if (error) toast.error(`Live feed load failed: ${error.message}`);
+        else setFeedRows((data ?? []) as FeedRow[]);
+        setFeedLoading(false);
+      });
+  }, [activeSource, feedRows.length]);
+
+  const handleSelectCase = (id: string) => {
+    setSelectedCaseId(id);
+    const tc = sampleTestCases.find((c) => c.id === id);
+    if (tc) {
+      setInputText(tc.text);
+      toast.success(`Loaded corpus case ${tc.id} — ${tc.source}`);
+    }
+  };
+
+  const handleSelectFeedRow = (row: FeedRow) => {
+    setInputText(row.source_text);
+    toast.success(`Loaded live report ${row.id.slice(0, 8)}…`);
+  };
+
   const handleExtract = async () => {
     const pre = await pipeline.runPreprocess(inputText);
     if (!pre) return;
-    // Layer B+C: Vector RAG + GraphRAG retrieval
     const rag = await pipeline.runRetrieval(pre.cleaned_text, 3);
-    // Layer 2: extraction grounded with retrieved context
     const ext = await pipeline.runExtraction(
       pre.cleaned_text, "full", pre.source_type, pre.reliability_score,
       rag?.context_block ?? "",
     );
     if (!ext) return;
-    // Layer A: deterministic KB grounding (MITRE/CVE/STIX)
     await pipeline.runKBValidation(
       ext.ner?.entities || [],
       ext.re?.relations || [],
       ext.causality?.causal_links || [],
     );
-    // Layer C cold-start fix: persist extraction so GraphRAG warms up
     try {
       const persisted = await persistExtraction(pre.cleaned_text, pre.source_type, ext);
       toast.success(`GraphRAG warmed: persisted to KG (report ${persisted.report_id.slice(0, 8)}…)`);
@@ -68,16 +126,12 @@ export default function KGConstruction() {
     setIngesting(true);
     toast.info("Ingesting MITRE ATT&CK + CISA KEV — this may take 20–40s…");
     try {
-      const { data, error } = await supabase.functions.invoke("kb-ingest", {
-        body: { sources: ["mitre", "kev"] },
-      });
+      const { data, error } = await supabase.functions.invoke("kb-ingest", { body: { sources: ["mitre", "kev"] } });
       if (error) throw error;
       toast.success(`KB updated → ${data?.kb_size ?? "?"} canonical IDs (mitre=${data?.results?.mitre ?? 0}, kev=${data?.results?.kev ?? 0})`);
     } catch (e) {
       toast.error(`KB ingest failed: ${e instanceof Error ? e.message : "unknown"}`);
-    } finally {
-      setIngesting(false);
-    }
+    } finally { setIngesting(false); }
   };
 
   const handleBootstrapCorpus = async () => {
@@ -89,25 +143,19 @@ export default function KGConstruction() {
       if (error) throw error;
       if (data?.ok === false) throw new Error(data.error || "ingest failed");
       toast.success(
-        `Bootstrap queued (${data?.limit ?? 10} advisories). ` +
-        `Running in background — watch the Threat Feed for cisa_bootstrap_progress events. ` +
-        `Layer B+C will be warm in ~1-2 min.`,
+        `Bootstrap queued (${data?.limit ?? 10} advisories). Running in background — Layer B+C will warm in ~1-2 min.`,
         { duration: 8000 },
       );
     } catch (e) {
       toast.error(`Bootstrap failed: ${e instanceof Error ? e.message : "unknown"}`);
-    } finally {
-      setBootstrapping(false);
-    }
+    } finally { setBootstrapping(false); }
   };
 
   const entities: ThreatEntity[] = pipeline.extraction?.ner?.entities || [];
   const relations: ThreatRelation[] = pipeline.extraction?.re?.relations || [];
 
-  // Generate graph layout from extracted entities
   const graphData = useMemo(() => {
     if (entities.length === 0) return { nodes: [], edges: [] };
-
     const nodes = entities.map((e, i) => {
       const angle = (2 * Math.PI * i) / entities.length;
       const radius = 35;
@@ -120,15 +168,15 @@ export default function KGConstruction() {
         confidence: e.confidence,
       };
     });
-
     const edges = relations.map((r) => ({
       from: nodes.findIndex((n) => n.id === r.source),
       to: nodes.findIndex((n) => n.id === r.target),
       relation: r.relation,
     })).filter((e) => e.from >= 0 && e.to >= 0);
-
     return { nodes, edges };
   }, [entities, relations]);
+
+  const persisted = pipeline.persistence?.persisted ?? false;
 
   return (
     <div className="space-y-6">
@@ -144,15 +192,86 @@ export default function KGConstruction() {
         )}
       </div>
 
-      {/* Input */}
+      {/* ── Multi-source input picker ─────────────────────────────── */}
       <Card className="border-border/50 bg-card/80">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Threat Text → Knowledge Graph</CardTitle>
+          <CardTitle className="text-sm font-medium">KG Input Source → Knowledge Graph</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
-            placeholder="Paste threat intelligence text..."
-            className="min-h-[80px] font-mono text-xs bg-secondary/30" />
+          <Tabs value={activeSource} onValueChange={setActiveSource}>
+            <TabsList className="bg-secondary/50 flex-wrap h-auto">
+              <TabsTrigger value="paste" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Paste text</TabsTrigger>
+              <TabsTrigger value="corpus" className="gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Test corpus (n=30)</TabsTrigger>
+              <TabsTrigger value="feed" className="gap-1.5"><Rss className="w-3.5 h-3.5" />Live feed</TabsTrigger>
+              <TabsTrigger value="upload" disabled className="gap-1.5 opacity-60"><Upload className="w-3.5 h-3.5" />Upload file</TabsTrigger>
+              <TabsTrigger value="api" disabled className="gap-1.5 opacity-60"><Plug className="w-3.5 h-3.5" />External API</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="paste" className="mt-3">
+              <Textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="Paste threat intelligence text..."
+                className="min-h-[100px] font-mono text-xs bg-secondary/30"
+              />
+            </TabsContent>
+
+            <TabsContent value="corpus" className="mt-3 space-y-2">
+              <Select value={selectedCaseId} onValueChange={handleSelectCase}>
+                <SelectTrigger className="bg-secondary/30">
+                  <SelectValue placeholder={`Select 1 of ${sampleTestCases.length} hand-curated cases…`} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {sampleTestCases.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      <span className="font-mono">{c.id}</span> — {c.source.slice(0, 60)}{c.source.length > 60 ? "…" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                className="min-h-[80px] font-mono text-xs bg-secondary/30"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                The same n=30 corpus drives every experimental unit in the thesis (§2.1). Selecting a case loads its real-world text into the pipeline.
+              </p>
+            </TabsContent>
+
+            <TabsContent value="feed" className="mt-3 space-y-2">
+              {feedLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground p-3"><Loader2 className="w-3 h-3 animate-spin" />Loading recent reports…</div>
+              ) : feedRows.length === 0 ? (
+                <div className="p-3 rounded bg-secondary/30 text-xs text-muted-foreground">
+                  No live reports yet. Use <strong className="text-foreground">Bootstrap GraphRAG Corpus</strong> below to ingest recent CISA advisories.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {feedRows.map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => handleSelectFeedRow(r)}
+                      className="w-full text-left p-2 rounded bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <Badge variant="outline" className="text-[10px] font-mono">{r.id.slice(0, 8)}</Badge>
+                        <span className="text-muted-foreground">{r.source_type ?? "report"}</span>
+                        <span className="text-muted-foreground ml-auto">{new Date(r.created_at).toLocaleString()}</span>
+                      </div>
+                      <div className="text-xs text-foreground/80 line-clamp-2 mt-1 font-mono">{r.source_text.slice(0, 200)}…</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                className="min-h-[80px] font-mono text-xs bg-secondary/30"
+              />
+            </TabsContent>
+          </Tabs>
+
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleExtract} disabled={pipeline.isProcessing} className="gap-2">
               <Play className="w-4 h-4" /> Extract, Validate & Persist to KG
@@ -167,17 +286,14 @@ export default function KGConstruction() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            <strong>Extract</strong> runs Layers B+C (RAG/GraphRAG) → LLM extraction → Layer A (KB grounding) → persists to KG.
-            <strong> Refresh KB</strong> updates Layer A ground truth (~700 MITRE + ~1100 CVEs in <code className="font-mono">kb_entries</code>).
-            <strong> Bootstrap</strong> seeds Layer B+C corpus by running 25 recent CISA advisories through the full pipeline (solves cold-start). Layer A is never touched by Bootstrap.
+            Sources: <strong>Paste</strong>, <strong>Test corpus (n=30)</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
           </p>
         </CardContent>
       </Card>
 
-      {/* Live corpus health — polls every 3s while bootstrap runs, every 8s otherwise */}
       <CorpusHealth pollIntervalMs={bootstrapping ? 3000 : 8000} />
 
-      {/* Layer B+C: RAG context retrieved before extraction */}
+      {/* Layer B+C */}
       {pipeline.rag && (
         <Card className="border-border/50 bg-card/80">
           <CardHeader className="pb-2">
@@ -188,23 +304,13 @@ export default function KGConstruction() {
           </CardHeader>
           <CardContent className="space-y-2 text-xs">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary" className="bg-info/15 text-info">
-                {pipeline.rag.similar_reports.length} similar prior reports
-              </Badge>
-              <Badge variant="secondary" className="bg-primary/15 text-primary">
-                {pipeline.rag.subgraph.entities.length} prior entities
-              </Badge>
-              <Badge variant="secondary" className="bg-primary/15 text-primary">
-                {pipeline.rag.subgraph.relations.length} prior relations
-              </Badge>
-              <Badge variant="outline" className="text-[10px]">
-                embedding: {pipeline.rag.embedding_used ? "text-embedding-004" : "none"}
-              </Badge>
+              <Badge variant="secondary" className="bg-info/15 text-info">{pipeline.rag.similar_reports.length} similar prior reports</Badge>
+              <Badge variant="secondary" className="bg-primary/15 text-primary">{pipeline.rag.subgraph.entities.length} prior entities</Badge>
+              <Badge variant="secondary" className="bg-primary/15 text-primary">{pipeline.rag.subgraph.relations.length} prior relations</Badge>
+              <Badge variant="outline" className="text-[10px]">embedding: {pipeline.rag.embedding_used ? "text-embedding-004" : "none"}</Badge>
             </div>
             {pipeline.rag.context_block ? (
-              <pre className="p-2 rounded bg-secondary/40 max-h-40 overflow-auto font-mono text-[10px] whitespace-pre-wrap">
-                {pipeline.rag.context_block}
-              </pre>
+              <pre className="p-2 rounded bg-secondary/40 max-h-40 overflow-auto font-mono text-[10px] whitespace-pre-wrap">{pipeline.rag.context_block}</pre>
             ) : (
               <p className="text-muted-foreground">No prior history matched — extraction runs ungrounded for this event (cold-start).</p>
             )}
@@ -212,7 +318,7 @@ export default function KGConstruction() {
         </Card>
       )}
 
-      {/* Layer A: KB grounding result */}
+      {/* Layer A */}
       {pipeline.kbValidation && (
         <Card className="border-border/50 bg-card/80">
           <CardHeader className="pb-2">
@@ -224,23 +330,19 @@ export default function KGConstruction() {
           <CardContent className="space-y-2 text-xs">
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary" className="bg-threat-low/15 text-threat-low">
-                {pipeline.kbValidation.summary.ok}/{pipeline.kbValidation.summary.total_checks} verified
-                ({(pipeline.kbValidation.accuracy * 100).toFixed(0)}%)
+                {pipeline.kbValidation.summary.ok}/{pipeline.kbValidation.summary.total_checks} verified ({(pipeline.kbValidation.accuracy * 100).toFixed(0)}%)
               </Badge>
               {pipeline.kbValidation.summary.hallucinated > 0 && (
                 <Badge variant="secondary" className="bg-threat-critical/15 text-threat-critical gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  {pipeline.kbValidation.summary.hallucinated} hallucinated
+                  <AlertTriangle className="w-3 h-3" />{pipeline.kbValidation.summary.hallucinated} hallucinated
                 </Badge>
               )}
               {pipeline.kbValidation.summary.malformed > 0 && (
-                <Badge variant="secondary" className="bg-threat-high/15 text-threat-high">
-                  {pipeline.kbValidation.summary.malformed} malformed
-                </Badge>
+                <Badge variant="secondary" className="bg-threat-high/15 text-threat-high">{pipeline.kbValidation.summary.malformed} malformed</Badge>
               )}
               <Badge variant="outline" className="text-[10px]">KB size: {pipeline.kbValidation.kb_size}</Badge>
             </div>
-            {pipeline.kbValidation.findings.filter(f => f.kind !== "ok").slice(0, 6).map((f, i) => (
+            {pipeline.kbValidation.findings.filter((f) => f.kind !== "ok").slice(0, 6).map((f, i) => (
               <div key={i} className="p-2 rounded bg-secondary/30 flex items-start gap-2">
                 <AlertTriangle className="w-3 h-3 text-threat-high mt-0.5 shrink-0" />
                 <div className="flex-1">
@@ -253,6 +355,7 @@ export default function KGConstruction() {
           </CardContent>
         </Card>
       )}
+
       {graphData.nodes.length > 0 && (
         <Card className="border-border/50 bg-card/80">
           <CardHeader className="pb-2">
@@ -286,8 +389,7 @@ export default function KGConstruction() {
               <div className="absolute bottom-3 right-3 flex flex-wrap gap-2">
                 {Object.entries(nodeColorMap).map(([type, color]) => (
                   <div key={type} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                    {type}
+                    <div className="w-2 h-2 rounded-full" style={{ background: color }} />{type}
                   </div>
                 ))}
               </div>
@@ -295,6 +397,54 @@ export default function KGConstruction() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Downstream Consumers panel ─────────────────────────── */}
+      <Card className="border-border/50 bg-card/80">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Share2 className="w-4 h-4 text-primary" /> KG Downstream — Where this graph flows next
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!persisted && (
+            <div className="p-2 rounded bg-secondary/30 text-[11px] text-muted-foreground">
+              Persist a KG above to activate downstream consumers. Reserved slots are visible below as a roadmap toward more intelligent decision-making.
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {DOWNSTREAM_CONSUMERS.map((c) => {
+              const Icon = c.icon;
+              const isActive = c.status === "active" && persisted;
+              const body = (
+                <div className={`p-3 rounded-lg border transition-colors ${
+                  isActive
+                    ? "border-primary/30 bg-primary/5 hover:bg-primary/10"
+                    : "border-border/40 bg-secondary/20 opacity-70"
+                }`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                    <span className="text-xs font-medium text-foreground">{c.name}</span>
+                    <Badge
+                      variant="outline"
+                      className={`ml-auto text-[10px] ${
+                        c.status === "active"
+                          ? persisted ? "border-threat-low/40 text-threat-low" : "border-muted-foreground/30 text-muted-foreground"
+                          : "border-info/30 text-info"
+                      }`}
+                    >
+                      {c.status === "active" ? (persisted ? "Active" : "Idle") : "Planned"}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">{c.desc}</p>
+                </div>
+              );
+              return c.to && isActive
+                ? <Link key={c.name} to={c.to}>{body}</Link>
+                : <div key={c.name}>{body}</div>;
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="entities">
         <TabsList className="bg-secondary/50">
