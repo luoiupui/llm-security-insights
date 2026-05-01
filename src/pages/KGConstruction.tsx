@@ -415,13 +415,25 @@ export default function KGConstruction() {
       {graphData.nodes.length > 0 && (
         <Card className="border-border/50 bg-card/80">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Network className="w-4 h-4 text-primary" /> LLM-Generated Knowledge Graph
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Network className="w-4 h-4 text-primary" /> LLM-Generated Knowledge Graph
+              </CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDownloadPng}
+                disabled={downloading || graphData.nodes.length === 0}
+                className="h-8 gap-1.5"
+              >
+                {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageDown className="w-3.5 h-3.5" />}
+                <span className="text-xs">Download PNG</span>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="relative w-full h-[320px] bg-secondary/20 rounded-lg overflow-hidden">
-              <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+              <svg ref={svgRef} className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
                 {graphData.edges.map((edge, i) => {
                   const from = graphData.nodes[edge.from];
                   const to = graphData.nodes[edge.to];
