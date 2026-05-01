@@ -179,6 +179,61 @@ export default function KGConstruction() {
 
   const persisted = pipeline.persistence?.persisted ?? false;
 
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadPng = async () => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    setDownloading(true);
+    try {
+      const clone = svg.cloneNode(true) as SVGSVGElement;
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      // Force a solid background for the PNG
+      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bg.setAttribute("width", "100");
+      bg.setAttribute("height", "100");
+      bg.setAttribute("fill", "#0b0f17");
+      clone.insertBefore(bg, clone.firstChild);
+      const xml = new XMLSerializer().serializeToString(clone);
+      const svg64 = btoa(unescape(encodeURIComponent(xml)));
+      const dataUrl = `data:image/svg+xml;base64,${svg64}`;
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("svg load failed"));
+        img.src = dataUrl;
+      });
+
+      const scale = 4; // upscale for crisp PNG
+      const canvas = document.createElement("canvas");
+      canvas.width = 1024 * (scale / 4);
+      canvas.height = 1024 * (scale / 4);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas context unavailable");
+      ctx.fillStyle = "#0b0f17";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const url = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `knowledge-graph-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success("Knowledge Graph exported as PNG");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to export PNG");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
