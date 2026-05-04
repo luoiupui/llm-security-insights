@@ -161,11 +161,91 @@ export default function KGConstruction() {
     } finally { setBootstrapping(false); }
   };
 
-  const entities: ThreatEntity[] = pipeline.extraction?.ner?.entities || [];
-  const relations: ThreatRelation[] = pipeline.extraction?.re?.relations || [];
+  const baseEntities: ThreatEntity[] = pipeline.extraction?.ner?.entities || [];
+  const baseRelations: ThreatRelation[] = pipeline.extraction?.re?.relations || [];
+  const synth = pipeline.kbValidation?.synthesized;
+
+  const entities: ThreatEntity[] = useMemo(() => {
+    if (!includeSynthesized || !synth) return baseEntities;
+    if (baseEntities.some((e) => e.name === synth.entity.name)) return baseEntities;
+    return [...baseEntities, synth.entity];
+  }, [baseEntities, synth, includeSynthesized]);
+  const relations: ThreatRelation[] = useMemo(() => {
+    if (!includeSynthesized || !synth) return baseRelations;
+    return [...baseRelations, ...synth.relations];
+  }, [baseRelations, synth, includeSynthesized]);
+
+  // Resolve effective pivot node based on centerPivot selector
+  const pivotEntity: ThreatEntity | null = useMemo(() => {
+    if (entities.length === 0) return null;
+    const wantedTypes: Record<string, string[]> = {
+      campaign: ["campaign"],
+      actor: ["threat_actor"],
+      malware: ["malware"],
+    };
+    if (centerPivot === "auto") {
+      // degree-centrality: highest-edge node
+      const deg = new Map<string, number>();
+      for (const r of relations) {
+        deg.set(r.source, (deg.get(r.source) || 0) + 1);
+        deg.set(r.target, (deg.get(r.target) || 0) + 1);
+      }
+      let best: ThreatEntity | null = null;
+      let bestDeg = -1;
+      for (const e of entities) {
+        const d = deg.get(e.name) || 0;
+        if (d > bestDeg) { best = e; bestDeg = d; }
+      }
+      return best;
+    }
+    const types = wantedTypes[centerPivot] || [];
+    return entities.find((e) => types.includes(String(e.type))) || null;
+  }, [entities, relations, centerPivot]);
 
   const graphData = useMemo(() => {
     if (entities.length === 0) return { nodes: [], edges: [] };
+    // Concentric layout when a pivot is identified; else original ring
+    if (pivotEntity) {
+      const others = entities.filter((e) => e.name !== pivotEntity.name);
+      const ringByType: Record<string, number> = {
+        campaign: 18, threat_actor: 22, malware: 28, ttp: 34, vulnerability: 34,
+        infrastructure: 40, software: 40, indicator: 40, identity: 40,
+      };
+      const buckets = new Map<number, ThreatEntity[]>();
+      for (const e of others) {
+        const r = ringByType[String(e.type)] ?? 36;
+        if (!buckets.has(r)) buckets.set(r, []);
+        buckets.get(r)!.push(e);
+      }
+      const nodes: { id: string; x: number; y: number; type: string; size: number; confidence: number; synthesised?: boolean }[] = [];
+      nodes.push({
+        id: pivotEntity.name, x: 50, y: 50, type: String(pivotEntity.type),
+        size: 32, confidence: pivotEntity.confidence,
+        synthesised: (pivotEntity as any).synthesised === true,
+      });
+      for (const [radius, list] of buckets.entries()) {
+        list.forEach((e, i) => {
+          const angle = (2 * Math.PI * i) / list.length;
+          nodes.push({
+            id: e.name,
+            x: 50 + radius * Math.cos(angle),
+            y: 50 + radius * Math.sin(angle),
+            type: String(e.type),
+            size: e.type === "threat_actor" ? 26 : e.type === "malware" ? 22 : 16,
+            confidence: e.confidence,
+            synthesised: (e as any).synthesised === true,
+          });
+        });
+      }
+      const edges = relations.map((r) => ({
+        from: nodes.findIndex((n) => n.id === r.source),
+        to: nodes.findIndex((n) => n.id === r.target),
+        relation: r.relation,
+        synthesised: (r as any).synthesised === true,
+      })).filter((e) => e.from >= 0 && e.to >= 0);
+      return { nodes, edges };
+    }
+    // Fallback: original equal-angle ring
     const nodes = entities.map((e, i) => {
       const angle = (2 * Math.PI * i) / entities.length;
       const radius = 35;
@@ -173,18 +253,20 @@ export default function KGConstruction() {
         id: e.name,
         x: 50 + radius * Math.cos(angle),
         y: 50 + radius * Math.sin(angle),
-        type: e.type,
+        type: String(e.type),
         size: e.type === "threat_actor" ? 28 : e.type === "malware" ? 22 : 16,
         confidence: e.confidence,
+        synthesised: (e as any).synthesised === true,
       };
     });
     const edges = relations.map((r) => ({
       from: nodes.findIndex((n) => n.id === r.source),
       to: nodes.findIndex((n) => n.id === r.target),
       relation: r.relation,
+      synthesised: (r as any).synthesised === true,
     })).filter((e) => e.from >= 0 && e.to >= 0);
     return { nodes, edges };
-  }, [entities, relations]);
+  }, [entities, relations, pivotEntity]);
 
   const timelineData = useMemo(
     () => buildTimelineLayout(pipeline.extraction ?? null),
