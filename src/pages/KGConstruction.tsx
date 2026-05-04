@@ -14,10 +14,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
-import { persistExtraction, type ThreatEntity, type ThreatRelation } from "@/lib/threat-pipeline";
+import { persistExtraction, type ThreatEntity, type ThreatRelation, type ReproConfig, DEFAULT_REPRO } from "@/lib/threat-pipeline";
 import { supabase } from "@/integrations/supabase/client";
 import { CorpusHealth } from "@/components/CorpusHealth";
 import { sampleTestCases } from "@/lib/test-corpus";
+import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel";
+import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
