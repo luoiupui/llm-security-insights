@@ -661,19 +661,29 @@ export default function KGConstruction() {
                       if (!from || !to) return null;
                       return (
                         <motion.line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-                          stroke="hsl(220, 14%, 25%)" strokeWidth="0.3"
+                          stroke={edge.synthesised ? "hsl(280, 70%, 60%)" : "hsl(220, 14%, 25%)"}
+                          strokeWidth="0.3"
+                          strokeDasharray={edge.synthesised ? "0.8 0.6" : undefined}
+                          opacity={edge.synthesised ? 0.7 : 1}
                           initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: i * 0.1, duration: 0.5 }} />
                       );
                     })}
-                    {graphData.nodes.map((node, i) => (
-                      <motion.g key={node.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: i * 0.08 }}>
-                        <circle cx={node.x} cy={node.y} r={node.size / 10} fill={nodeColorMap[node.type] || "#888"} opacity={0.15} />
-                        <circle cx={node.x} cy={node.y} r={node.size / 16} fill={nodeColorMap[node.type] || "#888"} />
-                        <text x={node.x} y={node.y + node.size / 8 + 2} textAnchor="middle" fill="hsl(215, 12%, 55%)" fontSize="2" fontFamily="monospace">
-                          {node.id.length > 15 ? node.id.slice(0, 12) + "…" : node.id}
-                        </text>
-                      </motion.g>
-                    ))}
+                    {graphData.nodes.map((node, i) => {
+                      const isCentre = pivotEntity?.name === node.id;
+                      return (
+                        <motion.g key={node.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: i * 0.08 }}>
+                          <circle cx={node.x} cy={node.y} r={node.size / 10} fill={nodeColorMap[node.type] || "#888"} opacity={0.15} />
+                          <circle cx={node.x} cy={node.y} r={node.size / 16} fill={nodeColorMap[node.type] || "#888"}
+                            stroke={node.synthesised ? "hsl(280, 70%, 70%)" : isCentre ? "hsl(48, 96%, 60%)" : "none"}
+                            strokeWidth={node.synthesised || isCentre ? 0.4 : 0}
+                            strokeDasharray={node.synthesised ? "0.6 0.4" : undefined} />
+                          <text x={node.x} y={node.y + node.size / 8 + 2} textAnchor="middle"
+                            fill={isCentre ? "hsl(48, 96%, 70%)" : "hsl(215, 12%, 55%)"} fontSize="2" fontFamily="monospace">
+                            {node.id.length > 15 ? node.id.slice(0, 12) + "…" : node.id}
+                          </text>
+                        </motion.g>
+                      );
+                    })}
                   </>
                 )}
 
