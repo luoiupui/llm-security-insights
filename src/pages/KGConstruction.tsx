@@ -120,6 +120,7 @@ export default function KGConstruction() {
       ext.ner?.entities || [],
       ext.re?.relations || [],
       ext.causality?.causal_links || [],
+      pre.cleaned_text,
     );
     try {
       const persisted = await persistExtraction(pre.cleaned_text, pre.source_type, ext);
