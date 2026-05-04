@@ -99,6 +99,10 @@ export interface KBValidation {
   summary: { total_checks: number; ok: number; hallucinated: number; malformed: number; non_canonical: number };
   accuracy: number;
   kb_size: number;
+  synthesized?: {
+    entity: ThreatEntity & { synthesised?: boolean };
+    relations: (ThreatRelation & { synthesised?: boolean })[];
+  } | null;
 }
 
 export interface RAGContext {
