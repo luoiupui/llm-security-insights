@@ -382,6 +382,84 @@ export default function KGConstruction() {
       lines.push("  classDef indicator fill:#94a3b8,stroke:#334155,color:#000;");
       lines.push("  classDef identity fill:#f472b6,stroke:#831843,color:#fff;");
 
+      // ── Second graph: Timeline / Causal layer (neuro-symbolic justification) ──
+      const causal = pipeline.extraction?.causality?.causal_links || [];
+      const timeline = pipeline.extraction?.causality?.attack_timeline || [];
+      const killChain = pipeline.extraction?.causality?.kill_chain_mapping || [];
+      if (causal.length > 0 || timeline.length > 0 || killChain.length > 0) {
+        lines.push("");
+        lines.push("%% ───────────────────────────────────────────────");
+        lines.push("%% Graph 2/2: Temporal & Causal layer");
+        lines.push("%% Sourced from extraction.causality (enables / leads_to / triggers / precedes)");
+        lines.push("%% Justifies the neuro-symbolic reasoning layer (path-weighted attribution)");
+        lines.push("%% ───────────────────────────────────────────────");
+        lines.push("graph TD");
+
+        const evIdMap = new Map<string, string>();
+        const evId = (label: string) => {
+          if (evIdMap.has(label)) return evIdMap.get(label)!;
+          const id = "ev_" + (evIdMap.size + 1) + "_" + label.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 20);
+          evIdMap.set(label, id);
+          return id;
+        };
+
+        // Kill-chain tactic subgraphs (if available)
+        if (killChain.length > 0) {
+          killChain.forEach((kc, ki) => {
+            const sgId = "tactic_" + ki + "_" + (kc.tactic || "unknown").replace(/[^a-zA-Z0-9]/g, "_").slice(0, 20);
+            const tech = kc.technique_id ? ` ${kc.technique_id}` : "";
+            lines.push(`  subgraph ${sgId}["${escapeLabel(kc.tactic || "tactic")}${tech}"]`);
+            (kc.events || []).forEach((ev) => {
+              lines.push(`    ${evId(ev)}["${escapeLabel(ev)}"]`);
+            });
+            lines.push("  end");
+          });
+        }
+
+        // Ordered attack_timeline → dotted "precedes" arrows
+        if (timeline.length > 0) {
+          const sorted = [...timeline].sort((a, b) => (a.order || 0) - (b.order || 0));
+          sorted.forEach((step) => {
+            const ts = step.timestamp_mentioned ? ` [${step.timestamp_mentioned}]` : "";
+            const cert = step.certainty ? ` (${step.certainty})` : "";
+            lines.push(`  ${evId(step.event)}["#${step.order}: ${escapeLabel(step.event)}${ts}${cert}"]:::tlEvent`);
+          });
+          for (let i = 0; i < sorted.length - 1; i++) {
+            lines.push(`  ${evId(sorted[i].event)} -.->|precedes| ${evId(sorted[i + 1].event)}`);
+          }
+        }
+
+        // Causal links — distinct arrows per causal_type
+        const arrowFor = (t: string) => {
+          if (t === "enables") return "==>";
+          if (t === "triggers") return "==>";
+          return "-->"; // leads_to / precedes / default
+        };
+        causal.forEach((c, i) => {
+          const sId = evId(c.cause);
+          const tId = evId(c.effect);
+          const tactic = c.mitre_tactic ? ` @${c.mitre_tactic}` : "";
+          const conf = typeof c.confidence === "number" ? ` ${(c.confidence * 100).toFixed(0)}%` : "";
+          const label = `${c.causal_type}${tactic}${conf}`;
+          lines.push(`  ${sId} ${arrowFor(c.causal_type)}|"${escapeLabel(label)}"| ${tId}`);
+          if (c.evidence) lines.push(`  %% [c${i}] ${c.causal_type}: ${c.evidence.slice(0, 120)}`);
+        });
+
+        // If no kill-chain and no timeline, ensure causal cause/effect nodes exist
+        if (killChain.length === 0 && timeline.length === 0) {
+          [...evIdMap.entries()].forEach(([label, id]) => {
+            lines.push(`  ${id}["${escapeLabel(label)}"]:::tlEvent`);
+          });
+        }
+
+        lines.push("");
+        lines.push("  classDef tlEvent fill:#1e293b,stroke:#0ea5e9,color:#e2e8f0;");
+        lines.push("  linkStyle default stroke:#f59e0b,stroke-width:1.5px;");
+      } else {
+        lines.push("");
+        lines.push("%% Timeline/causal graph omitted: extraction.causality is empty for this case.");
+      }
+
       const blob = new Blob([lines.join("\n")], { type: "text/vnd.mermaid;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
