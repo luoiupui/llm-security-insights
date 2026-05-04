@@ -105,7 +105,7 @@ serve(async (req) => {
         category: "retrieval",
         title: `Lexical RAG: retrieved ${similar.length} similar reports`,
         detail: `GraphRAG: ${subgraph.entities.length} entities + ${subgraph.relations.length} relations from history`,
-        metadata: { top_k, similarity_threshold, similar_count: similar.length, method: "jaccard_lexical" },
+        metadata: { top_k, similarity_threshold, similar_count: similar.length, method: "jaccard_lexical", frozen_snapshot_at },
       });
 
       return new Response(JSON.stringify({
