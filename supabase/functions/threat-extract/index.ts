@@ -208,7 +208,9 @@ EDGES: ${JSON.stringify(existingEdges)}
 
 SOURCE TEXT (for evidence verification):
 ${text}`,
-        "extract_causal_subgraph"
+        "extract_causal_subgraph",
+        reproTemp,
+        reproSeed,
       );
 
       results.causality = {
