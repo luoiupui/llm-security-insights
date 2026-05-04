@@ -594,12 +594,44 @@ export default function KGConstruction() {
               <Badge variant="outline" className="text-[10px] font-mono">
                 {reproPreset} · T={repro.temperature} · seed={repro.seed} · k={repro.topK} · {repro.frozenSnapshotAt ? `frozen@${new Date(repro.frozenSnapshotAt).toISOString().slice(0,16)}` : "live"}
               </Badge>
+              {viewMode === "force" && (
+                <>
+                  <span className="text-[10px] text-muted-foreground ml-1">Center pivot:</span>
+                  <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+                    {(["auto", "campaign", "actor", "malware"] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setCenterPivot(p)}
+                        className={`px-2 py-0.5 text-[10px] font-mono ${centerPivot === p ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-secondary/40"}`}
+                        title={p === "auto" ? "Degree-centrality (current default)" : `Pin highest-confidence ${p} node at the centre`}
+                      >{p}</button>
+                    ))}
+                  </div>
+                  {pivotEntity && (
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      centre: {pivotEntity.name} ({String(pivotEntity.type)})
+                    </Badge>
+                  )}
+                  {synth && (
+                    <button
+                      onClick={() => setIncludeSynthesized((v) => !v)}
+                      className={`text-[10px] px-2 py-0.5 rounded border ${includeSynthesized ? "border-primary/40 text-primary bg-primary/10" : "border-border/60 text-muted-foreground"}`}
+                      title="Toggle the synthesised campaign SDO emitted by Layer A (kb-validate)"
+                    >
+                      {includeSynthesized ? "✓" : "○"} synth campaign: {synth.entity.name}
+                    </button>
+                  )}
+                </>
+              )}
               {viewMode === "timeline" && (
                 <Badge variant="outline" className="text-[10px]">
                   {timelineData.nodes.length} events · {timelineData.edges.length} causal edges
                 </Badge>
               )}
             </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">
+              Layout-only override. Neuro-symbolic credibility & attribution outputs are unaffected — only the SVG centring rule changes. "Auto" = degree centrality (typically the actor); "campaign" = STIX-style campaign-pivot; synthesised campaign nodes (dashed) are added by Layer A when the LLM omits an explicit campaign SDO.
+            </p>
           </CardHeader>
           <CardContent>
             <div className="relative w-full h-[360px] bg-secondary/20 rounded-lg overflow-hidden">
