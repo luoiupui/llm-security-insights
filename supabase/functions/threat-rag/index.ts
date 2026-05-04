@@ -56,7 +56,7 @@ serve(async (req) => {
     );
 
     if (mode === "embed_and_retrieve") {
-      const { text, top_k = 3, similarity_threshold = 0.1 } = body;
+      const { text, top_k = 3, similarity_threshold = 0.1, frozen_snapshot_at = null } = body;
       if (!text) {
         return new Response(JSON.stringify({ error: "text required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -65,11 +65,15 @@ serve(async (req) => {
 
       // Lexical RAG: pull recent reports, score by Jaccard token overlap
       const queryTokens = tokenize(text);
-      const { data: candidates } = await supabase
+      let candidatesQuery = supabase
         .from("threat_reports")
         .select("id, summary, source_text, created_at")
         .order("created_at", { ascending: false })
         .limit(200);
+      if (frozen_snapshot_at) {
+        candidatesQuery = candidatesQuery.lte("created_at", frozen_snapshot_at);
+      }
+      const { data: candidates } = await candidatesQuery;
 
       const scored = (candidates ?? [])
         .map((r: any) => {
