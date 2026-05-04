@@ -18,6 +18,8 @@ import {
   type GraphNative,
   type KBValidation,
   type RAGContext,
+  type ReproConfig,
+  DEFAULT_REPRO,
 } from "@/lib/threat-pipeline";
 import { toast } from "sonner";
 
@@ -68,12 +70,12 @@ export function useThreatPipeline() {
     }
   }, []);
 
-  const runRetrieval = useCallback(async (text: string, topK = 3) => {
+  const runRetrieval = useCallback(async (text: string, topK = 3, frozenSnapshotAt: string | null = null) => {
     setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Layer B+C: Retrieving context (Vector RAG + GraphRAG)..." }));
     try {
-      const r = await retrieveContext(text, topK);
+      const r = await retrieveContext(text, topK, frozenSnapshotAt);
       setState((s) => ({ ...s, rag: r, currentStep: "Retrieval complete" }));
-      toast.success(`RAG: ${r.similar_reports.length} similar reports, ${r.subgraph.entities.length} prior entities`);
+      toast.success(`RAG: ${r.similar_reports.length} similar reports, ${r.subgraph.entities.length} prior entities${frozenSnapshotAt ? " (frozen)" : ""}`);
       return r;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Retrieval failed";
@@ -82,10 +84,10 @@ export function useThreatPipeline() {
     } finally { setState((s) => ({ ...s, isProcessing: false })); }
   }, []);
 
-  const runExtraction = useCallback(async (text: string, mode: "full" | "ner" | "re" | "causality" = "full", sourceType?: string, reliability?: number, ragContext = "") => {
+  const runExtraction = useCallback(async (text: string, mode: "full" | "ner" | "re" | "causality" = "full", sourceType?: string, reliability?: number, ragContext = "", repro?: Partial<ReproConfig>) => {
     setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Graph-Native LLM Extraction..." }));
     try {
-      const result = await extractThreats(text, mode, sourceType, reliability, ragContext);
+      const result = await extractThreats(text, mode, sourceType, reliability, ragContext, repro);
       setState((s) => ({ ...s, extraction: result, currentStep: "Graph-Native Extraction complete" }));
       const nodeCount = result.graph_native?.nodes?.length || result.ner?.entities?.length || 0;
       const edgeCount = result.graph_native?.edges?.length || result.re?.relations?.length || 0;

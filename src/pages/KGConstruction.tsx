@@ -14,10 +14,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
-import { persistExtraction, type ThreatEntity, type ThreatRelation } from "@/lib/threat-pipeline";
+import { persistExtraction, type ThreatEntity, type ThreatRelation, type ReproConfig, DEFAULT_REPRO } from "@/lib/threat-pipeline";
 import { supabase } from "@/integrations/supabase/client";
 import { CorpusHealth } from "@/components/CorpusHealth";
 import { sampleTestCases } from "@/lib/test-corpus";
+import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel";
+import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
@@ -69,6 +71,10 @@ export default function KGConstruction() {
   const [feedLoading, setFeedLoading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
+  const [viewMode, setViewMode] = useState<"force" | "timeline">("force");
+  const initial = loadRepro();
+  const [reproPreset, setReproPreset] = useState<ReproPreset>(initial.preset);
+  const [repro, setRepro] = useState<ReproConfig>(initial.config);
   const pipeline = useThreatPipeline();
 
   // Lazy-load the live feed when user opens the tab
@@ -104,10 +110,10 @@ export default function KGConstruction() {
   const handleExtract = async () => {
     const pre = await pipeline.runPreprocess(inputText);
     if (!pre) return;
-    const rag = await pipeline.runRetrieval(pre.cleaned_text, 3);
+    const rag = await pipeline.runRetrieval(pre.cleaned_text, repro.topK, repro.frozenSnapshotAt);
     const ext = await pipeline.runExtraction(
       pre.cleaned_text, "full", pre.source_type, pre.reliability_score,
-      rag?.context_block ?? "",
+      rag?.context_block ?? "", repro,
     );
     if (!ext) return;
     await pipeline.runKBValidation(
@@ -176,6 +182,12 @@ export default function KGConstruction() {
     })).filter((e) => e.from >= 0 && e.to >= 0);
     return { nodes, edges };
   }, [entities, relations]);
+
+  const timelineData = useMemo(
+    () => buildTimelineLayout(pipeline.extraction ?? null),
+    [pipeline.extraction]
+  );
+  const hasTemporal = timelineData.nodes.length > 0;
 
   const persisted = pipeline.persistence?.persisted ?? false;
 
@@ -276,6 +288,13 @@ export default function KGConstruction() {
           </Badge>
         )}
       </div>
+
+      {/* ── Reproducibility & Comparison Mode ─────────────────── */}
+      <ReproPanel
+        value={repro}
+        preset={reproPreset}
+        onChange={(p, c) => { setReproPreset(p); setRepro(c); }}
+      />
 
       {/* ── Multi-source input picker ─────────────────────────────── */}
       <Card className="border-border/50 bg-card/80">
@@ -449,6 +468,18 @@ export default function KGConstruction() {
                 <Network className="w-4 h-4 text-primary" /> LLM-Generated Knowledge Graph
               </CardTitle>
               <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+                  <button
+                    onClick={() => setViewMode("force")}
+                    className={`px-2.5 py-1 text-[11px] ${viewMode === "force" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-secondary/40"}`}
+                  >Force-directed</button>
+                  <button
+                    onClick={() => hasTemporal && setViewMode("timeline")}
+                    disabled={!hasTemporal}
+                    className={`px-2.5 py-1 text-[11px] ${viewMode === "timeline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-secondary/40"} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    title={hasTemporal ? "Show temporal causal layout" : "No temporal/causal links extracted"}
+                  >Timeline</button>
+                </div>
                 <Button
                   size="sm"
                   variant="outline"
@@ -471,37 +502,132 @@ export default function KGConstruction() {
                 </Button>
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <Badge variant="outline" className="text-[10px] font-mono">
+                {reproPreset} · T={repro.temperature} · seed={repro.seed} · k={repro.topK} · {repro.frozenSnapshotAt ? `frozen@${new Date(repro.frozenSnapshotAt).toISOString().slice(0,16)}` : "live"}
+              </Badge>
+              {viewMode === "timeline" && (
+                <Badge variant="outline" className="text-[10px]">
+                  {timelineData.nodes.length} events · {timelineData.edges.length} causal edges
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="relative w-full h-[320px] bg-secondary/20 rounded-lg overflow-hidden">
+            <div className="relative w-full h-[360px] bg-secondary/20 rounded-lg overflow-hidden">
               <svg ref={svgRef} className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-                {graphData.edges.map((edge, i) => {
-                  const from = graphData.nodes[edge.from];
-                  const to = graphData.nodes[edge.to];
-                  if (!from || !to) return null;
-                  return (
-                    <motion.line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-                      stroke="hsl(220, 14%, 25%)" strokeWidth="0.3"
-                      initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: i * 0.1, duration: 0.5 }} />
-                  );
-                })}
-                {graphData.nodes.map((node, i) => (
-                  <motion.g key={node.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: i * 0.08 }}>
-                    <circle cx={node.x} cy={node.y} r={node.size / 10} fill={nodeColorMap[node.type] || "#888"} opacity={0.15} />
-                    <circle cx={node.x} cy={node.y} r={node.size / 16} fill={nodeColorMap[node.type] || "#888"} />
-                    <text x={node.x} y={node.y + node.size / 8 + 2} textAnchor="middle" fill="hsl(215, 12%, 55%)" fontSize="2" fontFamily="monospace">
-                      {node.id.length > 15 ? node.id.slice(0, 12) + "…" : node.id}
-                    </text>
-                  </motion.g>
-                ))}
+                <defs>
+                  {CAUSAL_TYPES.map((t) => (
+                    <marker
+                      key={t}
+                      id={`arrow-${t}`}
+                      viewBox="0 0 10 10"
+                      refX="8"
+                      refY="5"
+                      markerWidth="4"
+                      markerHeight="4"
+                      orient="auto-start-reverse"
+                    >
+                      <path d="M 0 0 L 10 5 L 0 10 z" fill={causalColor(t)} />
+                    </marker>
+                  ))}
+                </defs>
+
+                {viewMode === "force" && (
+                  <>
+                    {graphData.edges.map((edge, i) => {
+                      const from = graphData.nodes[edge.from];
+                      const to = graphData.nodes[edge.to];
+                      if (!from || !to) return null;
+                      return (
+                        <motion.line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                          stroke="hsl(220, 14%, 25%)" strokeWidth="0.3"
+                          initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: i * 0.1, duration: 0.5 }} />
+                      );
+                    })}
+                    {graphData.nodes.map((node, i) => (
+                      <motion.g key={node.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: i * 0.08 }}>
+                        <circle cx={node.x} cy={node.y} r={node.size / 10} fill={nodeColorMap[node.type] || "#888"} opacity={0.15} />
+                        <circle cx={node.x} cy={node.y} r={node.size / 16} fill={nodeColorMap[node.type] || "#888"} />
+                        <text x={node.x} y={node.y + node.size / 8 + 2} textAnchor="middle" fill="hsl(215, 12%, 55%)" fontSize="2" fontFamily="monospace">
+                          {node.id.length > 15 ? node.id.slice(0, 12) + "…" : node.id}
+                        </text>
+                      </motion.g>
+                    ))}
+                  </>
+                )}
+
+                {viewMode === "timeline" && (
+                  <>
+                    {/* Time axis */}
+                    <line x1="6" y1="92" x2="94" y2="92" stroke="hsl(220, 14%, 25%)" strokeWidth="0.2" />
+                    {timelineData.nodes.map((n, i) => (
+                      <g key={`tick-${i}`}>
+                        <line x1={n.x} y1="91" x2={n.x} y2="93" stroke="hsl(220, 14%, 35%)" strokeWidth="0.15" />
+                        <text x={n.x} y="96" textAnchor="middle" fill="hsl(215, 12%, 55%)" fontSize="1.6" fontFamily="monospace">
+                          t{i + 1}{n.timestamp ? ` ${n.timestamp.slice(0, 10)}` : ""}
+                        </text>
+                      </g>
+                    ))}
+                    {/* Causal edges */}
+                    {timelineData.edges.map((e, i) => {
+                      const from = timelineData.nodes[e.fromIdx];
+                      const to = timelineData.nodes[e.toIdx];
+                      if (!from || !to) return null;
+                      const midY = Math.min(from.y, to.y) - 4;
+                      const path = `M ${from.x} ${from.y} Q ${(from.x + to.x) / 2} ${midY} ${to.x} ${to.y}`;
+                      return (
+                        <motion.g key={`edge-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.06 }}>
+                          <path d={path} stroke={causalColor(e.causal_type)} strokeWidth="0.35" fill="none"
+                            opacity={0.55 + 0.45 * (e.confidence || 0.5)}
+                            markerEnd={`url(#arrow-${e.causal_type})`} />
+                          <text x={(from.x + to.x) / 2} y={midY - 0.6} textAnchor="middle"
+                            fill={causalColor(e.causal_type)} fontSize="1.6" fontFamily="monospace">
+                            {e.causal_type}
+                          </text>
+                        </motion.g>
+                      );
+                    })}
+                    {/* Event nodes */}
+                    {timelineData.nodes.map((n, i) => (
+                      <motion.g key={n.id + i} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: i * 0.08 }}>
+                        <circle cx={n.x} cy={n.y} r="2.4" fill={nodeColorMap[n.type] || "#888"} opacity={0.18} />
+                        <circle cx={n.x} cy={n.y} r="1.4" fill={nodeColorMap[n.type] || "#888"} />
+                        <text x={n.x} y={n.y - 2.4} textAnchor="middle" fill="hsl(215, 12%, 70%)" fontSize="1.8" fontFamily="monospace">
+                          {n.id.length > 14 ? n.id.slice(0, 12) + "…" : n.id}
+                        </text>
+                      </motion.g>
+                    ))}
+                    {/* Lane labels */}
+                    {[
+                      ["threat_actor", 18], ["campaign", 28], ["malware", 40], ["vulnerability", 52],
+                      ["ttp", 64], ["infrastructure", 76],
+                    ].map(([label, y]) => (
+                      <text key={label as string} x="2" y={(y as number) + 0.6} fill="hsl(215, 12%, 45%)" fontSize="1.4" fontFamily="monospace">
+                        {label}
+                      </text>
+                    ))}
+                  </>
+                )}
               </svg>
               <div className="absolute bottom-3 right-3 flex flex-wrap gap-2">
-                {Object.entries(nodeColorMap).map(([type, color]) => (
-                  <div key={type} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <div className="w-2 h-2 rounded-full" style={{ background: color }} />{type}
-                  </div>
-                ))}
+                {viewMode === "force"
+                  ? Object.entries(nodeColorMap).map(([type, color]) => (
+                      <div key={type} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <div className="w-2 h-2 rounded-full" style={{ background: color }} />{type}
+                      </div>
+                    ))
+                  : CAUSAL_TYPES.map((t) => (
+                      <div key={t} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <div className="w-2 h-2 rounded-full" style={{ background: causalColor(t) }} />{t}
+                      </div>
+                    ))}
               </div>
+              {!hasTemporal && viewMode === "force" && (
+                <div className="absolute top-3 left-3 text-[10px] text-muted-foreground bg-background/60 px-2 py-1 rounded">
+                  No temporal/causal links extracted — Timeline view disabled.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

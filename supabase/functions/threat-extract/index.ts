@@ -134,7 +134,13 @@ serve(async (req) => {
   }
 
   try {
-    const { text, mode = "full", source_type = "report", source_reliability = 0.8, rag_context = "" } = await req.json();
+    const {
+      text, mode = "full", source_type = "report", source_reliability = 0.8, rag_context = "",
+      temperature, seed, deterministic = true,
+    } = await req.json();
+    // Repro: deterministic preset forces T=0 + fixed seed regardless of caller values
+    const reproTemp = deterministic ? 0 : (typeof temperature === "number" ? temperature : 0.1);
+    const reproSeed = deterministic ? 42 : (typeof seed === "number" ? seed : undefined);
 
     if (!text || typeof text !== "string" || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "Text input is required" }), {
@@ -161,9 +167,12 @@ serve(async (req) => {
         LOVABLE_API_KEY,
         GRAPH_NATIVE_COT_PROMPT,
         buildGraphExtractionPrompt(text, source_type, source_reliability, rag_context),
-        "extract_knowledge_graph"
+        "extract_knowledge_graph",
+        reproTemp,
+        reproSeed,
       );
       results.rag_used = !!rag_context;
+      results.repro = { deterministic, temperature: reproTemp, seed: reproSeed ?? null };
 
       // Decompose unified graph output into layer-compatible formats
       results.ner = {
@@ -199,7 +208,9 @@ EDGES: ${JSON.stringify(existingEdges)}
 
 SOURCE TEXT (for evidence verification):
 ${text}`,
-        "extract_causal_subgraph"
+        "extract_causal_subgraph",
+        reproTemp,
+        reproSeed,
       );
 
       results.causality = {
@@ -243,7 +254,9 @@ async function callGraphNativeLLM(
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
-  toolName: string
+  toolName: string,
+  reproTemperature?: number,
+  reproSeed?: number,
 ): Promise<any> {
   const tools: any[] = [];
 
@@ -410,7 +423,8 @@ async function callGraphNativeLLM(
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.1,
+      temperature: typeof reproTemperature === "number" ? reproTemperature : 0.1,
+      ...(typeof reproSeed === "number" ? { seed: reproSeed } : {}),
       tools,
       tool_choice: { type: "function", function: { name: toolName } },
     }),

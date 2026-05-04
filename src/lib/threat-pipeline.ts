@@ -153,11 +153,29 @@ export async function preprocessText(text: string, sourceType: string = "auto"):
   return data;
 }
 
+/* ── Reproducibility config ── */
+
+export interface ReproConfig {
+  deterministic: boolean;
+  temperature: number;
+  seed: number;
+  topK: number;
+  frozenSnapshotAt: string | null; // ISO timestamp; null = live corpus
+}
+
+export const DEFAULT_REPRO: ReproConfig = {
+  deterministic: true,
+  temperature: 0,
+  seed: 42,
+  topK: 3,
+  frozenSnapshotAt: null,
+};
+
 /* ── Layer B+C: Retrieval (Vector RAG + GraphRAG) ── */
 
-export async function retrieveContext(text: string, topK: number = 3): Promise<RAGContext> {
+export async function retrieveContext(text: string, topK: number = 3, frozenSnapshotAt: string | null = null): Promise<RAGContext> {
   const { data, error } = await supabase.functions.invoke("threat-rag", {
-    body: { mode: "embed_and_retrieve", text, top_k: topK, similarity_threshold: 0.4 },
+    body: { mode: "embed_and_retrieve", text, top_k: topK, similarity_threshold: 0.4, frozen_snapshot_at: frozenSnapshotAt },
   });
   if (error) throw new Error(`Retrieval failed: ${error.message}`);
   return data;
@@ -183,9 +201,14 @@ export async function extractThreats(
   sourceType: string = "report",
   sourceReliability: number = 0.8,
   ragContext: string = "",
+  repro?: Partial<ReproConfig>,
 ): Promise<ExtractionResult> {
+  const r = { ...DEFAULT_REPRO, ...(repro || {}) };
   const { data, error } = await supabase.functions.invoke("threat-extract", {
-    body: { text, mode, source_type: sourceType, source_reliability: sourceReliability, rag_context: ragContext },
+    body: {
+      text, mode, source_type: sourceType, source_reliability: sourceReliability, rag_context: ragContext,
+      deterministic: r.deterministic, temperature: r.temperature, seed: r.seed,
+    },
   });
   if (error) throw new Error(`Extraction failed: ${error.message}`);
   return data;
@@ -265,6 +288,7 @@ export async function runFullPipeline(
   rawText: string,
   sourceType: string = "auto",
   query: string = "Identify the threat actor and reconstruct the attack chain",
+  repro?: Partial<ReproConfig>,
 ): Promise<{
   preprocessing: PreprocessResult;
   rag: RAGContext;
@@ -274,11 +298,12 @@ export async function runFullPipeline(
   attribution: AttributionResult;
   persistence: { report_id: string; persisted: boolean };
 }> {
+  const r = { ...DEFAULT_REPRO, ...(repro || {}) };
   const preprocessing = await preprocessText(rawText, sourceType);
-  const rag = await retrieveContext(preprocessing.cleaned_text, 3);
+  const rag = await retrieveContext(preprocessing.cleaned_text, r.topK, r.frozenSnapshotAt);
   const extraction = await extractThreats(
     preprocessing.cleaned_text, "full", preprocessing.source_type,
-    preprocessing.reliability_score, rag.context_block,
+    preprocessing.reliability_score, rag.context_block, r,
   );
   const entities = extraction.ner?.entities || [];
   const relations = extraction.re?.relations || [];
