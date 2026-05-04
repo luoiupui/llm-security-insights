@@ -224,9 +224,10 @@ export async function validateAgainstKB(
   entities: ThreatEntity[],
   relations: ThreatRelation[],
   causalLinks: CausalLink[],
+  sourceText: string = "",
 ): Promise<KBValidation> {
   const { data, error } = await supabase.functions.invoke("kb-validate", {
-    body: { entities, relations, causal_links: causalLinks },
+    body: { entities, relations, causal_links: causalLinks, source_text: sourceText },
   });
   if (error) throw new Error(`KB validation failed: ${error.message}`);
   return data;
