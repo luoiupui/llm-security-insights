@@ -117,6 +117,20 @@ export function useThreatPipeline() {
     } finally { setState((s) => ({ ...s, isProcessing: false })); }
   }, []);
 
+  const runConflictDetection = useCallback(async (entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[], reliability?: number, graphNative?: GraphNative) => {
+    setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Graph-Integrated Conflict detection..." }));
+    try {
+      const result = await detectConflicts(entities, relations, causalLinks, reliability, graphNative);
+      setState((s) => ({ ...s, conflicts: result, currentStep: "Conflict detection complete" }));
+      toast.success(`Conflicts: ${result.summary.passed} passed, ${result.summary.warnings} warnings, ${result.summary.failures} failures`);
+      return result;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Conflict detection failed";
+      setState((s) => ({ ...s, error: msg })); toast.error(msg);
+      return null;
+    } finally { setState((s) => ({ ...s, isProcessing: false })); }
+  }, []);
+
   const runAttribution = useCallback(async (query: string, entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[], graphNative?: GraphNative) => {
     setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Graph-Aware Attribution..." }));
     try {
