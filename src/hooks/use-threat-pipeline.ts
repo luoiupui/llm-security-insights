@@ -18,6 +18,8 @@ import {
   type GraphNative,
   type KBValidation,
   type RAGContext,
+  type ReproConfig,
+  DEFAULT_REPRO,
 } from "@/lib/threat-pipeline";
 import { toast } from "sonner";
 
