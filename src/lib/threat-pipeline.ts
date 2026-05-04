@@ -153,11 +153,29 @@ export async function preprocessText(text: string, sourceType: string = "auto"):
   return data;
 }
 
+/* ── Reproducibility config ── */
+
+export interface ReproConfig {
+  deterministic: boolean;
+  temperature: number;
+  seed: number;
+  topK: number;
+  frozenSnapshotAt: string | null; // ISO timestamp; null = live corpus
+}
+
+export const DEFAULT_REPRO: ReproConfig = {
+  deterministic: true,
+  temperature: 0,
+  seed: 42,
+  topK: 3,
+  frozenSnapshotAt: null,
+};
+
 /* ── Layer B+C: Retrieval (Vector RAG + GraphRAG) ── */
 
-export async function retrieveContext(text: string, topK: number = 3): Promise<RAGContext> {
+export async function retrieveContext(text: string, topK: number = 3, frozenSnapshotAt: string | null = null): Promise<RAGContext> {
   const { data, error } = await supabase.functions.invoke("threat-rag", {
-    body: { mode: "embed_and_retrieve", text, top_k: topK, similarity_threshold: 0.4 },
+    body: { mode: "embed_and_retrieve", text, top_k: topK, similarity_threshold: 0.4, frozen_snapshot_at: frozenSnapshotAt },
   });
   if (error) throw new Error(`Retrieval failed: ${error.message}`);
   return data;
