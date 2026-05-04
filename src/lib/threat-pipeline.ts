@@ -288,6 +288,7 @@ export async function runFullPipeline(
   rawText: string,
   sourceType: string = "auto",
   query: string = "Identify the threat actor and reconstruct the attack chain",
+  repro?: Partial<ReproConfig>,
 ): Promise<{
   preprocessing: PreprocessResult;
   rag: RAGContext;
@@ -297,11 +298,12 @@ export async function runFullPipeline(
   attribution: AttributionResult;
   persistence: { report_id: string; persisted: boolean };
 }> {
+  const r = { ...DEFAULT_REPRO, ...(repro || {}) };
   const preprocessing = await preprocessText(rawText, sourceType);
-  const rag = await retrieveContext(preprocessing.cleaned_text, 3);
+  const rag = await retrieveContext(preprocessing.cleaned_text, r.topK, r.frozenSnapshotAt);
   const extraction = await extractThreats(
     preprocessing.cleaned_text, "full", preprocessing.source_type,
-    preprocessing.reliability_score, rag.context_block,
+    preprocessing.reliability_score, rag.context_block, r,
   );
   const entities = extraction.ner?.entities || [];
   const relations = extraction.re?.relations || [];
