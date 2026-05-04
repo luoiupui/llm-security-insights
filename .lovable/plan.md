@@ -1,108 +1,106 @@
-## Goal
+## Goals
 
-Three coordinated changes:
-
-1. **Thesis** — insert §2.1 *KG Construction Flow & Corpus Usage* (diagram + unit-vs-corpus table) into `experiments-academic-report.md/.pdf` so the relationship between the 7-step pipeline and the n=30 corpus is explicit.
-2. **KG Construction page** — turn the single textarea into a **multi-source input picker** that exposes every data source the KG is actually built from, with reserved slots for future sources.
-3. **KG Construction page** — add a **Downstream Consumers** panel below the graph showing where the persisted KG flows next (dashboard review, attribution, future intelligent decisioning), with reserved slots for future consumers.
-
-No DB schema changes. No new edge functions.
+1. Make extraction reproducibility **configurable** from the UI (defaults pinned to deterministic, but user can switch for comparison).
+2. Surface the **temporal/timeline** dimension that already exists in the data but is currently invisible in the rendered KG.
 
 ---
 
-## 1. Thesis update — §2.1 KG Construction Flow & Corpus Usage
+## Part 1 — Reproducibility Controls
 
-**File:** `scripts/generate-reports.mjs` (the `whitePaper` template, ~line 150–209) → regenerates `public/reports/experiments-academic-report.md` and `.pdf`.
+### Current state (verified)
+- `threat-extract/index.ts` line 413 hardcodes `temperature: 0.1`, no `seed`.
+- `threat-rag/index.ts` line 59 reads `top_k` from request body (default 3), but the UI always passes 3 and uses live (growing) corpus.
+- No "frozen snapshot" concept exists.
 
-Insert a new subsection **before current §2.1 Graph-Native CoT**, renumber the existing 2.1–2.4 to 2.2–2.5.
+### Changes
 
-Content to add:
+**A. `supabase/functions/threat-extract/index.ts`**
+- Accept new body fields: `temperature` (number, default `0`), `seed` (number, default `42`), `deterministic` (bool, default `true`).
+- Pass `temperature` and `seed` into the Lovable AI Gateway call. When `deterministic=true`, force `temperature=0` and a fixed seed regardless.
 
-- **One-paragraph clarification**: the KG only materialises after step 7 (persist). Steps 1–6 produce an in-memory graph used immediately for UI rendering; step 7 writes to `kg_entities` / `kg_relations` / `kg_causal_links` and makes it queryable by future runs (GraphRAG warm-up).
-- **ASCII pipeline diagram** in a fenced ```text block:
+**B. `supabase/functions/threat-rag/index.ts`**
+- Accept `frozen_snapshot_at` (ISO timestamp). When set, filter `threat_reports` with `created_at <= frozen_snapshot_at` before similarity search — this freezes the GraphRAG corpus for reproducibility.
+- Keep `top_k` as-is but make sure the value flows through from the UI.
 
-```text
-Input text (1 of 30 corpus cases  OR  live CISA feed  OR  pasted IOC report)
-        |
-        v
-[1] Preprocess     -> defang, IOC extraction, source-reliability score
-[2] RAG Retrieval  -> Vector RAG (pgvector) + GraphRAG subgraph from prior KG
-[3] LLM Extract    -> 8-step Graph-Native CoT  (in-memory KG produced here)
-[4] KB-Validate    -> deterministic check vs 2,844 MITRE/CVE/STIX entries
-[5] Conflicts      -> neuro-symbolic rules + credibility scoring
-[6] KG-Query       -> attribution / attack-path reconstruction
-[7] Persist        -> writes kg_entities, kg_relations, kg_causal_links
-                     (this is the durable KG; feeds step 2 of next run)
-```
+**C. `src/lib/threat-pipeline.ts`**
+- Extend `extractThreats(...)` and `retrieveContext(...)` signatures with a single optional `repro?: ReproConfig` param:
+  ```ts
+  type ReproConfig = {
+    deterministic: boolean;   // default true
+    temperature: number;       // 0..1
+    seed: number;
+    topK: number;              // 1..10
+    frozenSnapshotAt: string | null; // ISO date or null = live
+  }
+  ```
+- Default exported constant `DEFAULT_REPRO` with deterministic preset.
+- Thread `repro` through `runFullPipeline`.
 
-- **Unit-vs-corpus table** (Markdown table) showing how each experimental unit consumes the same n=30 corpus:
+**D. `src/hooks/use-threat-pipeline.ts`**
+- Accept and forward `repro` to extract/retrieve calls.
 
-| Experimental unit | Corpus role | Pipeline stages exercised | Metric reported |
-|---|---|---|---|
-| Hallucination-Control (§5) | Inputs streamed to step 4 | 1→4 | hallucinated-ID rate |
-| Comparative Smoke Test (§6) | Inputs scored vs gold labels | 1→3 (per system) | NER/RE F1 |
-| Six-Layer System Test (§7) | Drives full pipeline; subgraphs become case studies | 1→7 | qualitative + Layer A coverage |
-| Ablation Study (§8) | Same 30 inputs, pipeline toggles per arm | 1→7 with components disabled | delta vs full system |
-
-- **Closing sentence**: clarifies that the n=30 corpus is the **shared input substrate** across all four units, which is why their numbers are directly comparable.
-
-After editing the template, run `node scripts/generate-reports.mjs` to regenerate the `.md` and `.pdf`.
-
----
-
-## 2. KG Construction page — Multi-source input picker
-
-**File:** `src/pages/KGConstruction.tsx`
-
-Replace the single `Textarea` block with a tabbed input picker. Tabs:
-
-1. **Paste text** — current `Textarea` (default, unchanged behaviour).
-2. **Test corpus (n=30)** — `Select` populated from `sampleTestCases` in `src/lib/test-corpus.ts`; selecting a case fills `inputText` with its `.text` and shows the case `id` + `source` as a small caption. Makes the §2.1 corpus link visible in the UI.
-3. **Live CISA feed** — read-only list (last 5 rows from `threat_reports` where `source_type='cisa_advisory'`); clicking one loads its `source_text`. If the table query returns 0 rows, show a hint pointing to the existing *Bootstrap GraphRAG Corpus* button.
-4. **Upload file** *(reserved)* — disabled tab with a "Coming soon" badge; placeholder for future `.txt` / STIX bundle upload.
-5. **External API connector** *(reserved)* — disabled tab with a "Coming soon" badge; placeholder for OTX / MISP / VirusTotal pulls.
-
-The existing **Extract, Validate & Persist to KG** button stays and operates on whichever source produced `inputText`. The descriptive paragraph under the buttons is updated to mention the four (current + reserved) source channels.
-
-No new dependencies — uses existing `Tabs`, `Select`, `Badge` UI primitives and the `supabase` client already imported.
+**E. `src/pages/KGConstruction.tsx` — new "Reproducibility Settings" panel**
+- Collapsible card above the Input Source card titled **"Reproducibility & Comparison Mode"**.
+- Controls:
+  - Preset selector (radio): **Deterministic (default)** | **Exploratory** | **Custom**.
+    - Deterministic → `{temperature:0, seed:42, topK:3, frozenSnapshotAt:<now-at-first-load>}`
+    - Exploratory → `{temperature:0.7, seed:random, topK:5, frozenSnapshotAt:null}`
+    - Custom → reveals individual controls.
+  - Slider: Temperature (0.0 – 1.0, step 0.1).
+  - Number input: Seed.
+  - Slider: Top-K RAG (1 – 10).
+  - Toggle + datetime: Freeze RAG snapshot at … (defaults to "now" timestamp captured on toggle-on).
+- Settings persisted in `localStorage` under `tg.repro.config`.
+- Small badge on the "LLM-Generated Knowledge Graph" card showing the active preset (e.g. `Deterministic · T=0 · seed=42 · k=3 · snapshot=2026-05-04T…`) so each generated graph is self-documenting for thesis comparisons.
 
 ---
 
-## 3. KG Construction page — Downstream Consumers panel
+## Part 2 — Timeline / Temporal KG
 
-**File:** `src/pages/KGConstruction.tsx`
+### Current state (verified)
+- The schema already stores temporal data:
+  - `kg_causal_links.temporal_order` (integer)
+  - `kg_causal_links.causal_type` ∈ {enables, leads_to, triggers, precedes}
+  - `extraction.causality.attack_timeline[]` with `order`, `event`, `timestamp_mentioned`, `certainty`
+- The current SVG renderer (`KGConstruction.tsx` lines 477–497) only plots **nodes + relational edges** with random/force coordinates. **Causal links and `temporal_order` are extracted and persisted but never drawn.** So the final KG is rendered as a *static* graph despite the underlying data being temporal.
 
-Add a new `Card` rendered after the graph SVG (only when `pipeline.persistence?.persisted` is true, otherwise show a muted placeholder explaining "Persist a KG to see downstream consumers"). Title: **KG Downstream — Where this graph flows next**.
+### Changes
 
-Content: a 2-column grid of compact "consumer" cards. Each card has an icon, name, status badge, and one-line description. Initial set:
+**A. KG renderer — add a "Timeline view" toggle**
+- Add a view-mode segmented control on the "LLM-Generated Knowledge Graph" card: **Force-directed** (current) | **Timeline** (new).
+- **Timeline layout** (when selected):
+  - X-axis = `temporal_order` from `attack_timeline` / `causal_links` (left = earliest).
+  - Y-axis = entity type lane (threat_actor / malware / vulnerability / infrastructure / ttp).
+  - Causal edges drawn as arrows with markers; edge color encodes `causal_type` (enables=blue, leads_to=amber, triggers=red, precedes=gray).
+  - Edge labels show the causal_type when zoomed; small timestamp captions under each event node when `timestamp_mentioned` exists.
+  - Lightweight time axis at the bottom with tick labels for ordered steps `t1 … tN`.
 
-| Consumer | Status | Description |
-|---|---|---|
-| Dashboard review (Overview / KG Construction) | Active | Human analyst inspection of nodes, edges, causal links |
-| Attribution engine (`/attribution`) | Active | Graph-aware actor attribution via `threat-kg-query` |
-| GraphRAG warm-up (next pipeline run) | Active | Persisted KG becomes step 2 retrieval context |
-| Conflict / credibility scoring | Active | Neuro-symbolic rules consume entities + relations |
-| Automated response playbooks | Reserved | Future SOAR hand-off (e.g. block IOC, isolate host) |
-| Risk-scoring & decision support | Reserved | Future analyst-assist for prioritisation |
-| STIX 2.1 export to external SIEM | Reserved | Future bundle export endpoint |
-| ML feedback loop (re-ranking) | Reserved | Future training signal for embedding fine-tune |
+**B. Build a `buildTimelineLayout(extraction)` helper**
+- Walk `extraction.causality.attack_timeline` → assign each event an x-slot.
+- Map each event to its primary entity (string match against `nodes`) → assign y-lane.
+- Produce `{nodes:[{id,x,y,type,timestamp}], edges:[{from,to,causal_type,confidence}]}`.
 
-Active cards link to their existing route where one exists (`/attribution`, `/overview`). Reserved cards are visually muted with a "Planned" badge and no link — this satisfies the "leave space for further upgrade towards more intelligent decision making" requirement and makes the downstream surface explicit without faking functionality.
+**C. SVG export (PNG + SVG buttons) already in place** — they will automatically capture the new timeline view since they serialize whatever is in `svgRef`.
 
-No backend work; this is a documentation/UX surface.
+**D. Legend + empty-state**
+- If `causal_links.length === 0`, show an inline note: *"No temporal links extracted from this corpus — switch to Force-directed view."* and disable the Timeline option.
 
 ---
 
 ## Technical notes
 
-- `sampleTestCases` is already exported from `src/lib/test-corpus.ts`; the new corpus tab imports it directly (client-side, no fetch).
-- The CISA feed tab uses `supabase.from('threat_reports').select('id,source_text,created_at,source_type').eq('source_type','cisa_advisory').order('created_at',{ascending:false}).limit(5)`.
-- Reserved tabs/cards use `disabled` + a `Badge variant="outline"` reading "Planned" — no half-built handlers.
-- Thesis regeneration: the `whitePaper` template in `scripts/generate-reports.mjs` is the single source of truth; `.pdf` is built from it by the same script.
-- No migration, no new edge function, no schema change. Memory remains accurate.
+- Lovable AI Gateway (`gemini-3-flash-preview`) accepts `temperature`; `seed` is forwarded but model-side determinism is best-effort. The UI badge will make this transparent.
+- `frozen_snapshot_at` filter is a simple `WHERE created_at <= $1` on `threat_reports` inside `match_threat_reports` call path. We can add it client-side after fetching candidates (no DB function change needed) to keep the migration scope zero.
+- No DB migration required — all temporal data already exists.
 
-## Out of scope
+## Files touched
 
-- No real upload handler, no real external-API connector — those are deliberately reserved tabs.
-- No new metrics, no new ablation runs — §2.1 is purely structural/expository.
-- No changes to `/experiments`, ablation-runner, or any other pipeline code.
+- `supabase/functions/threat-extract/index.ts`
+- `supabase/functions/threat-rag/index.ts`
+- `src/lib/threat-pipeline.ts`
+- `src/hooks/use-threat-pipeline.ts`
+- `src/pages/KGConstruction.tsx` (new repro panel + timeline view + helper)
+
+## Answer to your second question
+
+The system **does** capture the temporal dimension end-to-end (LLM extracts `attack_timeline` with order + timestamps + certainty, persisted in `kg_causal_links.temporal_order`/`causal_type`), but the **final KG visualization in the UI is static** — it renders only structural nodes and relational edges and ignores `temporal_order` and `causal_type`. So the data is dynamic; only the rendering is static. Part 2 above closes that gap.
