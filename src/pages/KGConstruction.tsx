@@ -38,6 +38,9 @@ const nodeColorMap: Record<string, string> = {
   vulnerability: "hsl(38, 92%, 50%)",
   software: "hsl(200, 80%, 55%)",
   infrastructure: "hsl(215, 12%, 55%)",
+  campaign: "hsl(280, 70%, 60%)",
+  indicator: "hsl(190, 70%, 50%)",
+  identity: "hsl(50, 70%, 55%)",
 };
 
 const SAMPLE = `APT-29 used SUNBURST backdoor in the SolarWinds Orion supply chain attack (T1195.002). SUNBURST exploited CVE-2020-10148 and communicated via avsvmcloud[.]com (185.225.69.24). TEARDROP dropper implemented T1071.001 for C2. APT-29 also used RAINDROP loader targeting Microsoft Exchange.`;
