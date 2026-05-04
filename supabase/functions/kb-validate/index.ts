@@ -138,6 +138,56 @@ serve(async (req) => {
       if (c?.mitre_tactic) checkId(c.mitre_tactic, { entity_name: `${c.cause}→${c.effect}` });
     }
 
+    // ── Campaign-synthesis: if no campaign SDO present, try to detect a named operation
+    // from the source text and synthesise a campaign entity + attributed-to / part-of edges.
+    // This makes campaign-pivot layout possible without altering the symbolic credibility layer.
+    const NAMED_CAMPAIGNS: { match: RegExp; canonical: string }[] = [
+      { match: /\bsolarwinds\b|\bsunburst\b|\bsolorigate\b/i, canonical: "SolarWinds Campaign" },
+      { match: /\bnotpetya\b/i, canonical: "NotPetya Campaign" },
+      { match: /\bwannacry\b/i, canonical: "WannaCry Campaign" },
+      { match: /\bcolonial pipeline\b/i, canonical: "Colonial Pipeline Incident" },
+      { match: /\blog4shell\b|\blog4j\b/i, canonical: "Log4Shell Exploitation" },
+      { match: /\bhafnium\b|\bproxylogon\b/i, canonical: "ProxyLogon Campaign" },
+      { match: /\bmoveit\b/i, canonical: "MOVEit Campaign" },
+      { match: /\bxz utils?\b|\bxz-utils\b/i, canonical: "XZ Utils Backdoor" },
+    ];
+    const hasCampaignEntity = (entities as any[]).some((e) =>
+      String(e?.stix_type || "").toLowerCase() === "campaign" ||
+      String(e?.type || "").toLowerCase() === "campaign"
+    );
+    const synthesized: { entity: any; relations: any[] } | null = (() => {
+      if (hasCampaignEntity) return null;
+      const haystack = `${source_text} ${(entities as any[]).map((e) => e?.name).join(" ")}`;
+      const hit = NAMED_CAMPAIGNS.find((c) => c.match.test(haystack));
+      if (!hit) return null;
+      const synthEntity = {
+        name: hit.canonical,
+        type: "campaign",
+        stix_type: "campaign",
+        confidence: 0.75,
+        context: "synthesised by kb-validate (no explicit campaign SDO emitted by LLM)",
+        synthesised: true,
+      };
+      const rels: any[] = [];
+      for (const e of entities as any[]) {
+        const t = String(e?.type || "").toLowerCase();
+        if (t === "threat_actor") {
+          rels.push({
+            source: e.name, target: hit.canonical, relation: "attributed-to",
+            confidence: 0.7, evidence: "synthesised attribution to named campaign",
+            edge_type: "inferred", synthesised: true,
+          });
+        } else if (t === "malware" || t === "tool" || t === "infrastructure" || t === "ttp") {
+          rels.push({
+            source: hit.canonical, target: e.name, relation: "uses",
+            confidence: 0.65, evidence: "synthesised campaign membership",
+            edge_type: "inferred", synthesised: true,
+          });
+        }
+      }
+      return { entity: synthEntity, relations: rels };
+    })();
+
     const summary = {
       total_checks: findings.length,
       ok: findings.filter((f) => f.kind === "ok").length,
@@ -152,11 +202,11 @@ serve(async (req) => {
       event_type: "kb_validation",
       category: "grounding",
       title: `Layer A validation: ${summary.ok}/${summary.total_checks} IDs verified`,
-      detail: `${summary.hallucinated} hallucinated, ${summary.malformed} malformed, ${summary.non_canonical} non-canonical`,
-      metadata: { summary, accuracy },
+      detail: `${summary.hallucinated} hallucinated, ${summary.malformed} malformed, ${summary.non_canonical} non-canonical${synthesized ? ` · synthesised campaign: ${synthesized.entity.name}` : ""}`,
+      metadata: { summary, accuracy, synthesized_campaign: synthesized?.entity?.name ?? null },
     });
 
-    return new Response(JSON.stringify({ findings, summary, accuracy, kb_size: kb?.length ?? 0 }), {
+    return new Response(JSON.stringify({ findings, summary, accuracy, kb_size: kb?.length ?? 0, synthesized }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
