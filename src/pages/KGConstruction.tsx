@@ -646,6 +646,17 @@ export default function KGConstruction() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={handleDownloadMermaid}
+                  disabled={graphData.nodes.length === 0}
+                  className="h-8 gap-1.5"
+                  title="Export as Mermaid graph script (.mmd)"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="text-xs">Download Mermaid</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={handleDownloadPng}
                   disabled={downloading || graphData.nodes.length === 0}
                   className="h-8 gap-1.5"
