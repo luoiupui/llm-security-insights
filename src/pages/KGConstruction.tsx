@@ -333,6 +333,71 @@ export default function KGConstruction() {
     }
   };
 
+  const handleDownloadMermaid = () => {
+    try {
+      const sanitizeId = (s: string) =>
+        "n_" + s.replace(/[^a-zA-Z0-9]/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+      const escapeLabel = (s: string) => s.replace(/"/g, "'").slice(0, 60);
+      const typeShape: Record<string, [string, string]> = {
+        threat_actor: ["((", "))"],
+        campaign: ["{{", "}}"],
+        malware: ["[", "]"],
+        vulnerability: ["[/", "/]"],
+        ttp: ["[\\", "\\]"],
+        infrastructure: ["[(", ")]"],
+        software: ["[", "]"],
+        indicator: [">", "]"],
+        identity: ["([", "])"],
+      };
+      const lines: string[] = [];
+      lines.push("%% ThreatGraph Knowledge Graph (Mermaid)");
+      lines.push(`%% Generated: ${new Date().toISOString()}`);
+      lines.push(`%% Pivot: ${pivotEntity}  |  Nodes: ${entities.length}  Edges: ${relations.length}`);
+      lines.push("graph LR");
+      const idMap = new Map<string, string>();
+      entities.forEach((e, i) => {
+        let id = sanitizeId(e.name) || `n${i}`;
+        while ([...idMap.values()].includes(id)) id += "_" + i;
+        idMap.set(e.name, id);
+        const [open, close] = typeShape[e.type] ?? ["[", "]"];
+        const tag = e.mitre_id ? ` ${e.mitre_id}` : "";
+        const synth = (e as any).synthesised ? " *" : "";
+        lines.push(`  ${id}${open}"${escapeLabel(e.name)}${tag}${synth}"${close}:::${e.type}`);
+      });
+      relations.forEach((r) => {
+        const s = idMap.get(r.source);
+        const t = idMap.get(r.target);
+        if (!s || !t) return;
+        const arrow = (r as any).synthesised ? "-.->" : "-->";
+        lines.push(`  ${s} ${arrow}|"${escapeLabel(r.relation)}"| ${t}`);
+      });
+      lines.push("");
+      lines.push("  classDef threat_actor fill:#dc2626,stroke:#7f1d1d,color:#fff;");
+      lines.push("  classDef campaign fill:#a855f7,stroke:#581c87,color:#fff;");
+      lines.push("  classDef malware fill:#ea580c,stroke:#7c2d12,color:#fff;");
+      lines.push("  classDef vulnerability fill:#eab308,stroke:#713f12,color:#000;");
+      lines.push("  classDef ttp fill:#0ea5e9,stroke:#0c4a6e,color:#fff;");
+      lines.push("  classDef infrastructure fill:#10b981,stroke:#064e3b,color:#fff;");
+      lines.push("  classDef software fill:#6366f1,stroke:#312e81,color:#fff;");
+      lines.push("  classDef indicator fill:#94a3b8,stroke:#334155,color:#000;");
+      lines.push("  classDef identity fill:#f472b6,stroke:#831843,color:#fff;");
+
+      const blob = new Blob([lines.join("\n")], { type: "text/vnd.mermaid;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `knowledge-graph-${Date.now()}.mmd`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Knowledge Graph exported as Mermaid (.mmd)");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to export Mermaid");
+    }
+  };
+
   const handleDownloadSvg = () => {
     const svg = svgRef.current;
     if (!svg) return;
