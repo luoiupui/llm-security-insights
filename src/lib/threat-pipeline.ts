@@ -201,9 +201,14 @@ export async function extractThreats(
   sourceType: string = "report",
   sourceReliability: number = 0.8,
   ragContext: string = "",
+  repro?: Partial<ReproConfig>,
 ): Promise<ExtractionResult> {
+  const r = { ...DEFAULT_REPRO, ...(repro || {}) };
   const { data, error } = await supabase.functions.invoke("threat-extract", {
-    body: { text, mode, source_type: sourceType, source_reliability: sourceReliability, rag_context: ragContext },
+    body: {
+      text, mode, source_type: sourceType, source_reliability: sourceReliability, rag_context: ragContext,
+      deterministic: r.deterministic, temperature: r.temperature, seed: r.seed,
+    },
   });
   if (error) throw new Error(`Extraction failed: ${error.message}`);
   return data;
