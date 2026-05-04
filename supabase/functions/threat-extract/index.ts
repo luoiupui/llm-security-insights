@@ -134,7 +134,13 @@ serve(async (req) => {
   }
 
   try {
-    const { text, mode = "full", source_type = "report", source_reliability = 0.8, rag_context = "" } = await req.json();
+    const {
+      text, mode = "full", source_type = "report", source_reliability = 0.8, rag_context = "",
+      temperature, seed, deterministic = true,
+    } = await req.json();
+    // Repro: deterministic preset forces T=0 + fixed seed regardless of caller values
+    const reproTemp = deterministic ? 0 : (typeof temperature === "number" ? temperature : 0.1);
+    const reproSeed = deterministic ? 42 : (typeof seed === "number" ? seed : undefined);
 
     if (!text || typeof text !== "string" || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "Text input is required" }), {
