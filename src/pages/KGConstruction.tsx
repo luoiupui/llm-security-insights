@@ -110,10 +110,10 @@ export default function KGConstruction() {
   const handleExtract = async () => {
     const pre = await pipeline.runPreprocess(inputText);
     if (!pre) return;
-    const rag = await pipeline.runRetrieval(pre.cleaned_text, 3);
+    const rag = await pipeline.runRetrieval(pre.cleaned_text, repro.topK, repro.frozenSnapshotAt);
     const ext = await pipeline.runExtraction(
       pre.cleaned_text, "full", pre.source_type, pre.reliability_score,
-      rag?.context_block ?? "",
+      rag?.context_block ?? "", repro,
     );
     if (!ext) return;
     await pipeline.runKBValidation(
