@@ -42,7 +42,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { entities = [], relations = [], causal_links = [] } = await req.json();
+    const { entities = [], relations = [], causal_links = [], source_text = "" } = await req.json();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
