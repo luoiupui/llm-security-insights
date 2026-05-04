@@ -350,9 +350,10 @@ export default function KGConstruction() {
         identity: ["([", "])"],
       };
       const lines: string[] = [];
-      lines.push("%% ThreatGraph Knowledge Graph (Mermaid)");
+      lines.push("%% ThreatGraph Knowledge Graph (Mermaid) — 2 graphs in one file");
       lines.push(`%% Generated: ${new Date().toISOString()}`);
-      lines.push(`%% Pivot: ${pivotEntity}  |  Nodes: ${entities.length}  Edges: ${relations.length}`);
+      lines.push(`%% Pivot: ${pivotEntity?.name ?? "auto"}  |  Nodes: ${entities.length}  Edges: ${relations.length}`);
+      lines.push("%% Graph 1/2: Static KG (entities + relations + synthesised campaign)");
       lines.push("graph LR");
       const idMap = new Map<string, string>();
       entities.forEach((e, i) => {
