@@ -315,7 +315,7 @@ export async function runFullPipeline(
   const causalLinks = extraction.causality?.causal_links || [];
   const graphNative = extraction.graph_native;
 
-  const kbValidation = await validateAgainstKB(entities, relations, causalLinks);
+  const kbValidation = await validateAgainstKB(entities, relations, causalLinks, preprocessing.cleaned_text);
   const conflicts = await detectConflicts(entities, relations, causalLinks, preprocessing.reliability_score, graphNative);
   const attribution = await performAttribution(query, entities, relations, causalLinks, graphNative);
   const persistence = await persistExtraction(preprocessing.cleaned_text, preprocessing.source_type, extraction);
