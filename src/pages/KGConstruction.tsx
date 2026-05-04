@@ -448,16 +448,28 @@ export default function KGConstruction() {
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Network className="w-4 h-4 text-primary" /> LLM-Generated Knowledge Graph
               </CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleDownloadPng}
-                disabled={downloading || graphData.nodes.length === 0}
-                className="h-8 gap-1.5"
-              >
-                {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageDown className="w-3.5 h-3.5" />}
-                <span className="text-xs">Download PNG</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDownloadSvg}
+                  disabled={graphData.nodes.length === 0}
+                  className="h-8 gap-1.5"
+                >
+                  <ImageDown className="w-3.5 h-3.5" />
+                  <span className="text-xs">Download SVG</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDownloadPng}
+                  disabled={downloading || graphData.nodes.length === 0}
+                  className="h-8 gap-1.5"
+                >
+                  {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageDown className="w-3.5 h-3.5" />}
+                  <span className="text-xs">Download PNG</span>
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
