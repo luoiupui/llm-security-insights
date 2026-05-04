@@ -183,6 +183,12 @@ export default function KGConstruction() {
     return { nodes, edges };
   }, [entities, relations]);
 
+  const timelineData = useMemo(
+    () => buildTimelineLayout(pipeline.extraction ?? null),
+    [pipeline.extraction]
+  );
+  const hasTemporal = timelineData.nodes.length > 0;
+
   const persisted = pipeline.persistence?.persisted ?? false;
 
   const svgRef = useRef<SVGSVGElement | null>(null);
