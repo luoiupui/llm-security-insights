@@ -167,9 +167,12 @@ serve(async (req) => {
         LOVABLE_API_KEY,
         GRAPH_NATIVE_COT_PROMPT,
         buildGraphExtractionPrompt(text, source_type, source_reliability, rag_context),
-        "extract_knowledge_graph"
+        "extract_knowledge_graph",
+        reproTemp,
+        reproSeed,
       );
       results.rag_used = !!rag_context;
+      results.repro = { deterministic, temperature: reproTemp, seed: reproSeed ?? null };
 
       // Decompose unified graph output into layer-compatible formats
       results.ner = {
