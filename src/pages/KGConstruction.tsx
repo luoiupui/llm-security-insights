@@ -72,6 +72,8 @@ export default function KGConstruction() {
   const [ingesting, setIngesting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
   const [viewMode, setViewMode] = useState<"force" | "timeline">("force");
+  const [centerPivot, setCenterPivot] = useState<"auto" | "campaign" | "actor" | "malware">("auto");
+  const [includeSynthesized, setIncludeSynthesized] = useState(true);
   const initial = loadRepro();
   const [reproPreset, setReproPreset] = useState<ReproPreset>(initial.preset);
   const [repro, setRepro] = useState<ReproConfig>(initial.config);
