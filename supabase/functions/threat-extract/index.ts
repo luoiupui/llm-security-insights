@@ -254,7 +254,9 @@ async function callGraphNativeLLM(
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
-  toolName: string
+  toolName: string,
+  reproTemperature?: number,
+  reproSeed?: number,
 ): Promise<any> {
   const tools: any[] = [];
 
