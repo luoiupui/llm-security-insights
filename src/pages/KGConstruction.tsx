@@ -38,6 +38,9 @@ const nodeColorMap: Record<string, string> = {
   vulnerability: "hsl(38, 92%, 50%)",
   software: "hsl(200, 80%, 55%)",
   infrastructure: "hsl(215, 12%, 55%)",
+  campaign: "hsl(280, 70%, 60%)",
+  indicator: "hsl(190, 70%, 50%)",
+  identity: "hsl(50, 70%, 55%)",
 };
 
 const SAMPLE = `APT-29 used SUNBURST backdoor in the SolarWinds Orion supply chain attack (T1195.002). SUNBURST exploited CVE-2020-10148 and communicated via avsvmcloud[.]com (185.225.69.24). TEARDROP dropper implemented T1071.001 for C2. APT-29 also used RAINDROP loader targeting Microsoft Exchange.`;
@@ -72,6 +75,8 @@ export default function KGConstruction() {
   const [ingesting, setIngesting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
   const [viewMode, setViewMode] = useState<"force" | "timeline">("force");
+  const [centerPivot, setCenterPivot] = useState<"auto" | "campaign" | "actor" | "malware">("auto");
+  const [includeSynthesized, setIncludeSynthesized] = useState(true);
   const initial = loadRepro();
   const [reproPreset, setReproPreset] = useState<ReproPreset>(initial.preset);
   const [repro, setRepro] = useState<ReproConfig>(initial.config);
@@ -120,6 +125,7 @@ export default function KGConstruction() {
       ext.ner?.entities || [],
       ext.re?.relations || [],
       ext.causality?.causal_links || [],
+      pre.cleaned_text,
     );
     try {
       const persisted = await persistExtraction(pre.cleaned_text, pre.source_type, ext);
@@ -158,11 +164,91 @@ export default function KGConstruction() {
     } finally { setBootstrapping(false); }
   };
 
-  const entities: ThreatEntity[] = pipeline.extraction?.ner?.entities || [];
-  const relations: ThreatRelation[] = pipeline.extraction?.re?.relations || [];
+  const baseEntities: ThreatEntity[] = pipeline.extraction?.ner?.entities || [];
+  const baseRelations: ThreatRelation[] = pipeline.extraction?.re?.relations || [];
+  const synth = pipeline.kbValidation?.synthesized;
+
+  const entities: ThreatEntity[] = useMemo(() => {
+    if (!includeSynthesized || !synth) return baseEntities;
+    if (baseEntities.some((e) => e.name === synth.entity.name)) return baseEntities;
+    return [...baseEntities, synth.entity];
+  }, [baseEntities, synth, includeSynthesized]);
+  const relations: ThreatRelation[] = useMemo(() => {
+    if (!includeSynthesized || !synth) return baseRelations;
+    return [...baseRelations, ...synth.relations];
+  }, [baseRelations, synth, includeSynthesized]);
+
+  // Resolve effective pivot node based on centerPivot selector
+  const pivotEntity: ThreatEntity | null = useMemo(() => {
+    if (entities.length === 0) return null;
+    const wantedTypes: Record<string, string[]> = {
+      campaign: ["campaign"],
+      actor: ["threat_actor"],
+      malware: ["malware"],
+    };
+    if (centerPivot === "auto") {
+      // degree-centrality: highest-edge node
+      const deg = new Map<string, number>();
+      for (const r of relations) {
+        deg.set(r.source, (deg.get(r.source) || 0) + 1);
+        deg.set(r.target, (deg.get(r.target) || 0) + 1);
+      }
+      let best: ThreatEntity | null = null;
+      let bestDeg = -1;
+      for (const e of entities) {
+        const d = deg.get(e.name) || 0;
+        if (d > bestDeg) { best = e; bestDeg = d; }
+      }
+      return best;
+    }
+    const types = wantedTypes[centerPivot] || [];
+    return entities.find((e) => types.includes(String(e.type))) || null;
+  }, [entities, relations, centerPivot]);
 
   const graphData = useMemo(() => {
     if (entities.length === 0) return { nodes: [], edges: [] };
+    // Concentric layout when a pivot is identified; else original ring
+    if (pivotEntity) {
+      const others = entities.filter((e) => e.name !== pivotEntity.name);
+      const ringByType: Record<string, number> = {
+        campaign: 18, threat_actor: 22, malware: 28, ttp: 34, vulnerability: 34,
+        infrastructure: 40, software: 40, indicator: 40, identity: 40,
+      };
+      const buckets = new Map<number, ThreatEntity[]>();
+      for (const e of others) {
+        const r = ringByType[String(e.type)] ?? 36;
+        if (!buckets.has(r)) buckets.set(r, []);
+        buckets.get(r)!.push(e);
+      }
+      const nodes: { id: string; x: number; y: number; type: string; size: number; confidence: number; synthesised?: boolean }[] = [];
+      nodes.push({
+        id: pivotEntity.name, x: 50, y: 50, type: String(pivotEntity.type),
+        size: 32, confidence: pivotEntity.confidence,
+        synthesised: (pivotEntity as any).synthesised === true,
+      });
+      for (const [radius, list] of buckets.entries()) {
+        list.forEach((e, i) => {
+          const angle = (2 * Math.PI * i) / list.length;
+          nodes.push({
+            id: e.name,
+            x: 50 + radius * Math.cos(angle),
+            y: 50 + radius * Math.sin(angle),
+            type: String(e.type),
+            size: e.type === "threat_actor" ? 26 : e.type === "malware" ? 22 : 16,
+            confidence: e.confidence,
+            synthesised: (e as any).synthesised === true,
+          });
+        });
+      }
+      const edges = relations.map((r) => ({
+        from: nodes.findIndex((n) => n.id === r.source),
+        to: nodes.findIndex((n) => n.id === r.target),
+        relation: r.relation,
+        synthesised: (r as any).synthesised === true,
+      })).filter((e) => e.from >= 0 && e.to >= 0);
+      return { nodes, edges };
+    }
+    // Fallback: original equal-angle ring
     const nodes = entities.map((e, i) => {
       const angle = (2 * Math.PI * i) / entities.length;
       const radius = 35;
@@ -170,18 +256,20 @@ export default function KGConstruction() {
         id: e.name,
         x: 50 + radius * Math.cos(angle),
         y: 50 + radius * Math.sin(angle),
-        type: e.type,
+        type: String(e.type),
         size: e.type === "threat_actor" ? 28 : e.type === "malware" ? 22 : 16,
         confidence: e.confidence,
+        synthesised: (e as any).synthesised === true,
       };
     });
     const edges = relations.map((r) => ({
       from: nodes.findIndex((n) => n.id === r.source),
       to: nodes.findIndex((n) => n.id === r.target),
       relation: r.relation,
+      synthesised: (r as any).synthesised === true,
     })).filter((e) => e.from >= 0 && e.to >= 0);
     return { nodes, edges };
-  }, [entities, relations]);
+  }, [entities, relations, pivotEntity]);
 
   const timelineData = useMemo(
     () => buildTimelineLayout(pipeline.extraction ?? null),
@@ -506,12 +594,44 @@ export default function KGConstruction() {
               <Badge variant="outline" className="text-[10px] font-mono">
                 {reproPreset} · T={repro.temperature} · seed={repro.seed} · k={repro.topK} · {repro.frozenSnapshotAt ? `frozen@${new Date(repro.frozenSnapshotAt).toISOString().slice(0,16)}` : "live"}
               </Badge>
+              {viewMode === "force" && (
+                <>
+                  <span className="text-[10px] text-muted-foreground ml-1">Center pivot:</span>
+                  <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+                    {(["auto", "campaign", "actor", "malware"] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setCenterPivot(p)}
+                        className={`px-2 py-0.5 text-[10px] font-mono ${centerPivot === p ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-secondary/40"}`}
+                        title={p === "auto" ? "Degree-centrality (current default)" : `Pin highest-confidence ${p} node at the centre`}
+                      >{p}</button>
+                    ))}
+                  </div>
+                  {pivotEntity && (
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      centre: {pivotEntity.name} ({String(pivotEntity.type)})
+                    </Badge>
+                  )}
+                  {synth && (
+                    <button
+                      onClick={() => setIncludeSynthesized((v) => !v)}
+                      className={`text-[10px] px-2 py-0.5 rounded border ${includeSynthesized ? "border-primary/40 text-primary bg-primary/10" : "border-border/60 text-muted-foreground"}`}
+                      title="Toggle the synthesised campaign SDO emitted by Layer A (kb-validate)"
+                    >
+                      {includeSynthesized ? "✓" : "○"} synth campaign: {synth.entity.name}
+                    </button>
+                  )}
+                </>
+              )}
               {viewMode === "timeline" && (
                 <Badge variant="outline" className="text-[10px]">
                   {timelineData.nodes.length} events · {timelineData.edges.length} causal edges
                 </Badge>
               )}
             </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">
+              Layout-only override. Neuro-symbolic credibility & attribution outputs are unaffected — only the SVG centring rule changes. "Auto" = degree centrality (typically the actor); "campaign" = STIX-style campaign-pivot; synthesised campaign nodes (dashed) are added by Layer A when the LLM omits an explicit campaign SDO.
+            </p>
           </CardHeader>
           <CardContent>
             <div className="relative w-full h-[360px] bg-secondary/20 rounded-lg overflow-hidden">
@@ -541,19 +661,29 @@ export default function KGConstruction() {
                       if (!from || !to) return null;
                       return (
                         <motion.line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-                          stroke="hsl(220, 14%, 25%)" strokeWidth="0.3"
+                          stroke={edge.synthesised ? "hsl(280, 70%, 60%)" : "hsl(220, 14%, 25%)"}
+                          strokeWidth="0.3"
+                          strokeDasharray={edge.synthesised ? "0.8 0.6" : undefined}
+                          opacity={edge.synthesised ? 0.7 : 1}
                           initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: i * 0.1, duration: 0.5 }} />
                       );
                     })}
-                    {graphData.nodes.map((node, i) => (
-                      <motion.g key={node.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: i * 0.08 }}>
-                        <circle cx={node.x} cy={node.y} r={node.size / 10} fill={nodeColorMap[node.type] || "#888"} opacity={0.15} />
-                        <circle cx={node.x} cy={node.y} r={node.size / 16} fill={nodeColorMap[node.type] || "#888"} />
-                        <text x={node.x} y={node.y + node.size / 8 + 2} textAnchor="middle" fill="hsl(215, 12%, 55%)" fontSize="2" fontFamily="monospace">
-                          {node.id.length > 15 ? node.id.slice(0, 12) + "…" : node.id}
-                        </text>
-                      </motion.g>
-                    ))}
+                    {graphData.nodes.map((node, i) => {
+                      const isCentre = pivotEntity?.name === node.id;
+                      return (
+                        <motion.g key={node.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: i * 0.08 }}>
+                          <circle cx={node.x} cy={node.y} r={node.size / 10} fill={nodeColorMap[node.type] || "#888"} opacity={0.15} />
+                          <circle cx={node.x} cy={node.y} r={node.size / 16} fill={nodeColorMap[node.type] || "#888"}
+                            stroke={node.synthesised ? "hsl(280, 70%, 70%)" : isCentre ? "hsl(48, 96%, 60%)" : "none"}
+                            strokeWidth={node.synthesised || isCentre ? 0.4 : 0}
+                            strokeDasharray={node.synthesised ? "0.6 0.4" : undefined} />
+                          <text x={node.x} y={node.y + node.size / 8 + 2} textAnchor="middle"
+                            fill={isCentre ? "hsl(48, 96%, 70%)" : "hsl(215, 12%, 55%)"} fontSize="2" fontFamily="monospace">
+                            {node.id.length > 15 ? node.id.slice(0, 12) + "…" : node.id}
+                          </text>
+                        </motion.g>
+                      );
+                    })}
                   </>
                 )}
 

@@ -99,6 +99,10 @@ export interface KBValidation {
   summary: { total_checks: number; ok: number; hallucinated: number; malformed: number; non_canonical: number };
   accuracy: number;
   kb_size: number;
+  synthesized?: {
+    entity: ThreatEntity & { synthesised?: boolean };
+    relations: (ThreatRelation & { synthesised?: boolean })[];
+  } | null;
 }
 
 export interface RAGContext {
@@ -220,9 +224,10 @@ export async function validateAgainstKB(
   entities: ThreatEntity[],
   relations: ThreatRelation[],
   causalLinks: CausalLink[],
+  sourceText: string = "",
 ): Promise<KBValidation> {
   const { data, error } = await supabase.functions.invoke("kb-validate", {
-    body: { entities, relations, causal_links: causalLinks },
+    body: { entities, relations, causal_links: causalLinks, source_text: sourceText },
   });
   if (error) throw new Error(`KB validation failed: ${error.message}`);
   return data;
@@ -310,7 +315,7 @@ export async function runFullPipeline(
   const causalLinks = extraction.causality?.causal_links || [];
   const graphNative = extraction.graph_native;
 
-  const kbValidation = await validateAgainstKB(entities, relations, causalLinks);
+  const kbValidation = await validateAgainstKB(entities, relations, causalLinks, preprocessing.cleaned_text);
   const conflicts = await detectConflicts(entities, relations, causalLinks, preprocessing.reliability_score, graphNative);
   const attribution = await performAttribution(query, entities, relations, causalLinks, graphNative);
   const persistence = await persistExtraction(preprocessing.cleaned_text, preprocessing.source_type, extraction);

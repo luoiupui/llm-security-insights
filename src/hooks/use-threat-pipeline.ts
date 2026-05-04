@@ -101,13 +101,14 @@ export function useThreatPipeline() {
     } finally { setState((s) => ({ ...s, isProcessing: false })); }
   }, []);
 
-  const runKBValidation = useCallback(async (entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[]) => {
+  const runKBValidation = useCallback(async (entities: ThreatEntity[], relations: ThreatRelation[], causalLinks: CausalLink[], sourceText: string = "") => {
     setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Layer A: Validating against authoritative KB..." }));
     try {
-      const v = await validateAgainstKB(entities, relations, causalLinks);
+      const v = await validateAgainstKB(entities, relations, causalLinks, sourceText);
       setState((s) => ({ ...s, kbValidation: v, currentStep: "KB validation complete" }));
       const acc = (v.accuracy * 100).toFixed(0);
-      toast.success(`KB grounding: ${v.summary.ok}/${v.summary.total_checks} verified (${acc}%) · ${v.summary.hallucinated} hallucinated`);
+      const synthMsg = v.synthesized ? ` · synthesised campaign: ${v.synthesized.entity.name}` : "";
+      toast.success(`KB grounding: ${v.summary.ok}/${v.summary.total_checks} verified (${acc}%) · ${v.summary.hallucinated} hallucinated${synthMsg}`);
       return v;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "KB validation failed";
