@@ -283,6 +283,13 @@ export default function KGConstruction() {
         )}
       </div>
 
+      {/* ── Reproducibility & Comparison Mode ─────────────────── */}
+      <ReproPanel
+        value={repro}
+        preset={reproPreset}
+        onChange={(p, c) => { setReproPreset(p); setRepro(c); }}
+      />
+
       {/* ── Multi-source input picker ─────────────────────────────── */}
       <Card className="border-border/50 bg-card/80">
         <CardHeader className="pb-2">
