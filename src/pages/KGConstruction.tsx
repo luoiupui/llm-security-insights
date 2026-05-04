@@ -233,6 +233,35 @@ export default function KGConstruction() {
     }
   };
 
+  const handleDownloadSvg = () => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    try {
+      const clone = svg.cloneNode(true) as SVGSVGElement;
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clone.setAttribute("viewBox", "0 0 100 100");
+      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bg.setAttribute("width", "100");
+      bg.setAttribute("height", "100");
+      bg.setAttribute("fill", "#0b0f17");
+      clone.insertBefore(bg, clone.firstChild);
+      const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+      const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `knowledge-graph-${Date.now()}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Knowledge Graph exported as SVG");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to export SVG");
+    }
+  };
+
 
   return (
     <div className="space-y-6">
