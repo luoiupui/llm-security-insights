@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { buildForceSvg, buildTimelineSvg, buildLegacySnapshot, type ExportNode, type ExportEdge } from "@/lib/svg-export";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
 import { persistExtraction, type ThreatEntity, type ThreatRelation, type ReproConfig, DEFAULT_REPRO } from "@/lib/threat-pipeline";
 import { supabase } from "@/integrations/supabase/client";
@@ -477,34 +479,55 @@ export default function KGConstruction() {
     }
   };
 
-  const handleDownloadSvg = () => {
-    const svg = svgRef.current;
-    if (!svg) return;
+  const triggerDownload = (xml: string, suffix: string) => {
+    const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `knowledge-graph-${suffix}-${Date.now()}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportMeta = useMemo(() => ({
+    caseId: selectedCaseId || undefined,
+    preset: reproPreset,
+    temperature: repro.temperature,
+    seed: repro.seed,
+    generatedAt: new Date().toISOString(),
+  }), [selectedCaseId, reproPreset, repro]);
+
+  const handleDownloadSvg = (variant: "light" | "dark" | "legacy") => {
     try {
-      const clone = svg.cloneNode(true) as SVGSVGElement;
-      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      clone.setAttribute("viewBox", "0 0 100 100");
-      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bg.setAttribute("width", "100");
-      bg.setAttribute("height", "100");
-      bg.setAttribute("fill", "#0b0f17");
-      clone.insertBefore(bg, clone.firstChild);
-      const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-      const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `knowledge-graph-${Date.now()}.svg`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success("Knowledge Graph exported as SVG");
+      if (variant === "legacy") {
+        const svg = svgRef.current;
+        if (!svg) return;
+        triggerDownload(buildLegacySnapshot(svg, "dark"), "snapshot");
+        toast.success("KG exported (legacy snapshot)");
+        return;
+      }
+      const theme = variant;
+      let xml: string;
+      if (viewMode === "timeline") {
+        xml = buildTimelineSvg(timelineData.nodes, timelineData.edges, theme, exportMeta);
+      } else {
+        const exportNodes: ExportNode[] = graphData.nodes;
+        const exportEdges: ExportEdge[] = graphData.edges;
+        xml = buildForceSvg(exportNodes, exportEdges, pivotEntity?.name, theme, {
+          ...exportMeta,
+          centre: pivotEntity?.name,
+        });
+      }
+      triggerDownload(xml, `${viewMode}-${variant}`);
+      toast.success(`KG exported (${variant === "light" ? "Word/Print" : "Dark"} · editable)`);
     } catch (e) {
       console.error(e);
       toast.error("Failed to export SVG");
     }
   };
+
 
 
   return (
@@ -712,16 +735,36 @@ export default function KGConstruction() {
                     title={hasTemporal ? "Show temporal causal layout" : "No temporal/causal links extracted"}
                   >Timeline</button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleDownloadSvg}
-                  disabled={graphData.nodes.length === 0}
-                  className="h-8 gap-1.5"
-                >
-                  <ImageDown className="w-3.5 h-3.5" />
-                  <span className="text-xs">Download SVG</span>
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={graphData.nodes.length === 0} className="h-8 gap-1.5">
+                      <ImageDown className="w-3.5 h-3.5" />
+                      <span className="text-xs">Download SVG</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-72">
+                    <DropdownMenuLabel className="text-[10px] text-muted-foreground">Editable, structured (groups + legend + metadata)</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => handleDownloadSvg("light")}>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">SVG — Word / Print (white)</span>
+                        <span className="text-[10px] text-muted-foreground">Recommended for Office documents</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownloadSvg("dark")}>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">SVG — Dark (presentation)</span>
+                        <span className="text-[10px] text-muted-foreground">Matches on-screen theme</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleDownloadSvg("legacy")}>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">SVG — Flat snapshot (legacy)</span>
+                        <span className="text-[10px] text-muted-foreground">Sanitised live DOM clone</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   size="sm"
                   variant="outline"
