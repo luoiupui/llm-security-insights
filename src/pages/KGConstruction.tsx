@@ -479,34 +479,55 @@ export default function KGConstruction() {
     }
   };
 
-  const handleDownloadSvg = () => {
-    const svg = svgRef.current;
-    if (!svg) return;
+  const triggerDownload = (xml: string, suffix: string) => {
+    const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `knowledge-graph-${suffix}-${Date.now()}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportMeta = useMemo(() => ({
+    caseId: selectedCaseId || undefined,
+    preset: reproPreset,
+    temperature: repro.temperature,
+    seed: repro.seed,
+    generatedAt: new Date().toISOString(),
+  }), [selectedCaseId, reproPreset, repro]);
+
+  const handleDownloadSvg = (variant: "light" | "dark" | "legacy") => {
     try {
-      const clone = svg.cloneNode(true) as SVGSVGElement;
-      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      clone.setAttribute("viewBox", "0 0 100 100");
-      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bg.setAttribute("width", "100");
-      bg.setAttribute("height", "100");
-      bg.setAttribute("fill", "#0b0f17");
-      clone.insertBefore(bg, clone.firstChild);
-      const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-      const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `knowledge-graph-${Date.now()}.svg`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success("Knowledge Graph exported as SVG");
+      if (variant === "legacy") {
+        const svg = svgRef.current;
+        if (!svg) return;
+        triggerDownload(buildLegacySnapshot(svg, "dark"), "snapshot");
+        toast.success("KG exported (legacy snapshot)");
+        return;
+      }
+      const theme = variant;
+      let xml: string;
+      if (viewMode === "timeline") {
+        xml = buildTimelineSvg(timelineData.nodes, timelineData.edges, theme, exportMeta);
+      } else {
+        const exportNodes: ExportNode[] = graphData.nodes;
+        const exportEdges: ExportEdge[] = graphData.edges;
+        xml = buildForceSvg(exportNodes, exportEdges, pivotEntity?.name, theme, {
+          ...exportMeta,
+          centre: pivotEntity?.name,
+        });
+      }
+      triggerDownload(xml, `${viewMode}-${variant}`);
+      toast.success(`KG exported (${variant === "light" ? "Word/Print" : "Dark"} · editable)`);
     } catch (e) {
       console.error(e);
       toast.error("Failed to export SVG");
     }
   };
+
 
 
   return (
