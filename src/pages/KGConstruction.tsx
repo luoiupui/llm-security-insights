@@ -735,16 +735,36 @@ export default function KGConstruction() {
                     title={hasTemporal ? "Show temporal causal layout" : "No temporal/causal links extracted"}
                   >Timeline</button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleDownloadSvg}
-                  disabled={graphData.nodes.length === 0}
-                  className="h-8 gap-1.5"
-                >
-                  <ImageDown className="w-3.5 h-3.5" />
-                  <span className="text-xs">Download SVG</span>
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={graphData.nodes.length === 0} className="h-8 gap-1.5">
+                      <ImageDown className="w-3.5 h-3.5" />
+                      <span className="text-xs">Download SVG</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-72">
+                    <DropdownMenuLabel className="text-[10px] text-muted-foreground">Editable, structured (groups + legend + metadata)</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => handleDownloadSvg("light")}>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">SVG — Word / Print (white)</span>
+                        <span className="text-[10px] text-muted-foreground">Recommended for Office documents</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownloadSvg("dark")}>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">SVG — Dark (presentation)</span>
+                        <span className="text-[10px] text-muted-foreground">Matches on-screen theme</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleDownloadSvg("legacy")}>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">SVG — Flat snapshot (legacy)</span>
+                        <span className="text-[10px] text-muted-foreground">Sanitised live DOM clone</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   size="sm"
                   variant="outline"
