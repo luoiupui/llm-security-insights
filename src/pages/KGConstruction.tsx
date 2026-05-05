@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { buildForceSvg, buildTimelineSvg, buildLegacySnapshot, type ExportNode, type ExportEdge } from "@/lib/svg-export";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
 import { persistExtraction, type ThreatEntity, type ThreatRelation, type ReproConfig, DEFAULT_REPRO } from "@/lib/threat-pipeline";
 import { supabase } from "@/integrations/supabase/client";
