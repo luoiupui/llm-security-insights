@@ -411,31 +411,62 @@ async function callGraphNativeLLM(
     });
   }
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: typeof reproTemperature === "number" ? reproTemperature : 0.1,
-      ...(typeof reproSeed === "number" ? { seed: reproSeed } : {}),
-      tools,
-      tool_choice: { type: "function", function: { name: toolName } },
-    }),
+  const requestBody = JSON.stringify({
+    model: "google/gemini-3-flash-preview",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: typeof reproTemperature === "number" ? reproTemperature : 0.1,
+    ...(typeof reproSeed === "number" ? { seed: reproSeed } : {}),
+    tools,
+    tool_choice: { type: "function", function: { name: toolName } },
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error(`LLM API error [${response.status}]:`, errText);
+  // Retry transient upstream errors (502/503/504) with exponential backoff
+  let response: Response | null = null;
+  let lastErrText = "";
+  const maxAttempts = 4;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: requestBody,
+      });
+    } catch (e) {
+      lastErrText = e instanceof Error ? e.message : String(e);
+      console.error(`LLM fetch network error (attempt ${attempt}/${maxAttempts}):`, lastErrText);
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+        continue;
+      }
+      throw new Error(`LLM API network error: ${lastErrText}`);
+    }
+
+    if (response.ok) break;
+
     if (response.status === 429) throw Object.assign(new Error("Rate limited"), { status: 429 });
     if (response.status === 402) throw Object.assign(new Error("Credits exhausted"), { status: 402 });
+
+    // Retry on 5xx (gateway/upstream transient)
+    if (response.status >= 500 && response.status < 600 && attempt < maxAttempts) {
+      lastErrText = await response.text().catch(() => "");
+      console.warn(`LLM API ${response.status} (attempt ${attempt}/${maxAttempts}), retrying...`);
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+      continue;
+    }
+
+    const errText = await response.text();
+    console.error(`LLM API error [${response.status}]:`, errText);
     throw new Error(`LLM API error: ${response.status}`);
+  }
+
+  if (!response || !response.ok) {
+    throw new Error(`LLM API error: upstream unavailable after ${maxAttempts} attempts`);
   }
 
   const data = await response.json();
