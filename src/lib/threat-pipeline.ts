@@ -149,9 +149,9 @@ export interface AttributionResult {
 
 /* ── Layer 1: Preprocess ── */
 
-export async function preprocessText(text: string, sourceType: string = "auto"): Promise<PreprocessResult> {
+export async function preprocessText(text: string, sourceType: string = "auto", domain: string = "cti"): Promise<PreprocessResult> {
   const { data, error } = await supabase.functions.invoke("threat-preprocess", {
-    body: { text, source_type: sourceType },
+    body: { text, source_type: sourceType, domain },
   });
   if (error) throw new Error(`Preprocessing failed: ${error.message}`);
   return data;
@@ -206,12 +206,13 @@ export async function extractThreats(
   sourceReliability: number = 0.8,
   ragContext: string = "",
   repro?: Partial<ReproConfig>,
+  domain: string = "cti",
 ): Promise<ExtractionResult> {
   const r = { ...DEFAULT_REPRO, ...(repro || {}) };
   const { data, error } = await supabase.functions.invoke("threat-extract", {
     body: {
       text, mode, source_type: sourceType, source_reliability: sourceReliability, rag_context: ragContext,
-      deterministic: r.deterministic, temperature: r.temperature, seed: r.seed,
+      deterministic: r.deterministic, temperature: r.temperature, seed: r.seed, domain,
     },
   });
   if (error) throw new Error(`Extraction failed: ${error.message}`);
@@ -294,6 +295,7 @@ export async function runFullPipeline(
   sourceType: string = "auto",
   query: string = "Identify the threat actor and reconstruct the attack chain",
   repro?: Partial<ReproConfig>,
+  domain: string = "cti",
 ): Promise<{
   preprocessing: PreprocessResult;
   rag: RAGContext;
@@ -304,11 +306,11 @@ export async function runFullPipeline(
   persistence: { report_id: string; persisted: boolean };
 }> {
   const r = { ...DEFAULT_REPRO, ...(repro || {}) };
-  const preprocessing = await preprocessText(rawText, sourceType);
+  const preprocessing = await preprocessText(rawText, sourceType, domain);
   const rag = await retrieveContext(preprocessing.cleaned_text, r.topK, r.frozenSnapshotAt);
   const extraction = await extractThreats(
     preprocessing.cleaned_text, "full", preprocessing.source_type,
-    preprocessing.reliability_score, rag.context_block, r,
+    preprocessing.reliability_score, rag.context_block, r, domain,
   );
   const entities = extraction.ner?.entities || [];
   const relations = extraction.re?.relations || [];
