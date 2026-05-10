@@ -28,7 +28,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, source_type = "auto" } = await req.json();
+    const { text, source_type = "auto", domain = "cti" } = await req.json();
 
     if (!text || typeof text !== "string") {
       return new Response(JSON.stringify({ error: "Text input required" }), {
@@ -38,7 +38,9 @@ serve(async (req) => {
     }
 
     const detectedType = source_type === "auto" ? detectSourceType(text) : source_type;
-    const result = preprocessText(text, detectedType);
+    const result = domain === "clinical"
+      ? preprocessClinical(text, detectedType)
+      : preprocessText(text, detectedType);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -180,6 +182,77 @@ function preprocessText(text: string, sourceType: string): PreprocessResult {
       cleaned_length: cleaned.length,
       reduction_percent: ((1 - cleaned.length / text.length) * 100).toFixed(1),
       ioc_count: uniqueIOCs.length,
+    },
+  };
+}
+
+/* ── Clinical Mode (Simulation) ──
+ * PHI safety-net redaction + clinical-code IOC extraction.
+ * Treats the input as already de-identified but adds defense-in-depth scrubbing.
+ * NOT a substitute for proper de-identification (Safe Harbor / Expert Determination).
+ */
+function preprocessClinical(text: string, sourceType: string): PreprocessResult {
+  let cleaned = text;
+  const steps: string[] = [];
+
+  // PHI safety-net redactions (defense in depth)
+  cleaned = cleaned.replace(/\b[A-Z][a-z]+\s+[A-Z][a-z]+(?=,?\s+(?:MD|RN|PhD|DO|NP|PA))\b/g, "[PROVIDER]");
+  cleaned = cleaned.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN-REDACTED]");
+  cleaned = cleaned.replace(/\bMRN[:\s#]*\d{4,}\b/gi, "MRN [REDACTED]");
+  cleaned = cleaned.replace(/\bNHS[\s#]*\d{3}\s?\d{3}\s?\d{4}\b/gi, "NHS [REDACTED]");
+  cleaned = cleaned.replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, "[EMAIL]");
+  cleaned = cleaned.replace(/\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, "[PHONE]");
+  steps.push("PHI safety-net redaction (provider names, MRN/NHS/SSN, email, phone)");
+  steps.push("Clinical whitespace normalization");
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
+
+  // Clinical-code IOC extraction
+  const iocs: IOC[] = [];
+  let m: RegExpExecArray | null;
+
+  // ICD-10/11 codes (e.g. E11.9, I10, N18.3)
+  const icdRe = /\b([A-TV-Z]\d{2}(?:\.\d{1,4})?)\b/g;
+  while ((m = icdRe.exec(cleaned)) !== null) {
+    iocs.push({ type: "icd10", value: m[1], defanged: m[1] });
+  }
+
+  // RxNorm RXCUI (typical 4–7 digit codes appearing after RxCUI / RXCUI marker)
+  const rxRe = /\bRx?CUI[:\s]*([0-9]{4,8})\b/gi;
+  while ((m = rxRe.exec(cleaned)) !== null) {
+    iocs.push({ type: "rxnorm", value: m[1], defanged: m[1] });
+  }
+
+  // LOINC codes (NNNNN-N)
+  const loincRe = /\b(\d{4,5}-\d)\b/g;
+  while ((m = loincRe.exec(cleaned)) !== null) {
+    iocs.push({ type: "loinc", value: m[1], defanged: m[1] });
+  }
+
+  // Dosage strings
+  const doseRe = /\b(\d+(?:\.\d+)?\s?(?:mg|mcg|g|ml|units?)\b(?:\s+(?:PO|IV|IM|SC|SL|PR|QD|BID|TID|QID|QHS|PRN))?)/gi;
+  while ((m = doseRe.exec(cleaned)) !== null) {
+    iocs.push({ type: "dosage", value: m[1].trim(), defanged: m[1].trim() });
+  }
+
+  if (iocs.length > 0) {
+    steps.push(`Clinical code extraction (${iocs.length} ICD/RxNorm/LOINC/dosage tokens)`);
+  }
+
+  const uniqueIOCs = iocs.filter((ioc, i, arr) => arr.findIndex(o => o.value === ioc.value && o.type === ioc.type) === i);
+
+  return {
+    cleaned_text: cleaned,
+    source_type: sourceType === "auto" ? "clinical_note" : sourceType,
+    reliability_score: 0.9, // synthetic notes are structurally clean
+    iocs_found: uniqueIOCs,
+    cleaning_steps: steps,
+    metadata: {
+      original_length: text.length,
+      cleaned_length: cleaned.length,
+      reduction_percent: ((1 - cleaned.length / text.length) * 100).toFixed(1),
+      ioc_count: uniqueIOCs.length,
+      domain: "clinical",
+      simulation: true,
     },
   };
 }

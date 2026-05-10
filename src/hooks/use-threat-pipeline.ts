@@ -54,10 +54,10 @@ export function useThreatPipeline() {
 
   const setStep = (step: string) => setState((s) => ({ ...s, currentStep: step }));
 
-  const runPreprocess = useCallback(async (text: string, sourceType?: string) => {
+  const runPreprocess = useCallback(async (text: string, sourceType?: string, domain: string = "cti") => {
     setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Preprocessing..." }));
     try {
-      const result = await preprocessText(text, sourceType);
+      const result = await preprocessText(text, sourceType, domain);
       setState((s) => ({ ...s, preprocessing: result, currentStep: "Preprocessing complete" }));
       toast.success(`Preprocessed: ${result.iocs_found.length} IOCs found`);
       return result;
@@ -84,10 +84,10 @@ export function useThreatPipeline() {
     } finally { setState((s) => ({ ...s, isProcessing: false })); }
   }, []);
 
-  const runExtraction = useCallback(async (text: string, mode: "full" | "ner" | "re" | "causality" = "full", sourceType?: string, reliability?: number, ragContext = "", repro?: Partial<ReproConfig>) => {
+  const runExtraction = useCallback(async (text: string, mode: "full" | "ner" | "re" | "causality" = "full", sourceType?: string, reliability?: number, ragContext = "", repro?: Partial<ReproConfig>, domain: string = "cti") => {
     setState((s) => ({ ...s, isProcessing: true, error: null, currentStep: "Graph-Native LLM Extraction..." }));
     try {
-      const result = await extractThreats(text, mode, sourceType, reliability, ragContext, repro);
+      const result = await extractThreats(text, mode, sourceType, reliability, ragContext, repro, domain);
       setState((s) => ({ ...s, extraction: result, currentStep: "Graph-Native Extraction complete" }));
       const nodeCount = result.graph_native?.nodes?.length || result.ner?.entities?.length || 0;
       const edgeCount = result.graph_native?.edges?.length || result.re?.relations?.length || 0;
@@ -145,11 +145,11 @@ export function useThreatPipeline() {
     } finally { setState((s) => ({ ...s, isProcessing: false })); }
   }, []);
 
-  const runFull = useCallback(async (rawText: string, sourceType?: string, query?: string) => {
+  const runFull = useCallback(async (rawText: string, sourceType?: string, query?: string, domain: string = "cti") => {
     setState({ ...INITIAL_STATE, isProcessing: true, currentStep: "Starting RAG-Augmented Graph-Native Pipeline..." });
     try {
       setStep("Layer 1: Preprocessing → Layer B/C: Retrieval → Layer 2: Extract → Layer A: KB grounding → Layer 3/4: Conflicts/Attribution → Persist");
-      const result = await runFullPipeline(rawText, sourceType, query);
+      const result = await runFullPipeline(rawText, sourceType, query, undefined, domain);
       setState({
         isProcessing: false,
         currentStep: "Pipeline complete",

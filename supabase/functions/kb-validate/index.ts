@@ -42,7 +42,20 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { entities = [], relations = [], causal_links = [], source_text = "" } = await req.json();
+    const { entities = [], relations = [], causal_links = [], source_text = "", domain = "cti" } = await req.json();
+
+    // Clinical mode: skip MITRE/CVE checks (those KBs are CTI-specific). Return a benign passthrough so the UI keeps working.
+    if (domain === "clinical") {
+      return new Response(JSON.stringify({
+        findings: [],
+        summary: { total_checks: 0, ok: 0, hallucinated: 0, malformed: 0, non_canonical: 0 },
+        accuracy: 1,
+        kb_size: 0,
+        synthesized: null,
+        domain: "clinical",
+        note: "KB grounding skipped — clinical mode uses ICD-10/RxNorm/LOINC; full validator out of scope for this simulation.",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,

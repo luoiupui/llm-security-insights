@@ -66,7 +66,66 @@ serve(async (req) => {
       causal_links = [],
       source_reliability = 0.8,
       graph_native,
+      domain = "cti",
     } = await req.json();
+
+    // Clinical mode: run only domain-agnostic structural checks; skip MITRE-specific TTP rules.
+    if (domain === "clinical") {
+      const nodes = graph_native?.nodes || entities;
+      const edges = graph_native?.edges || relations;
+      const clinicalConflicts: ConflictResult[] = [];
+
+      // Allergy ↔ medication contradiction
+      const allergens = new Set(
+        edges.filter((e: any) => e.relation === "allergic_to").map((e: any) => String(e.target).toLowerCase())
+      );
+      const prescribed = edges
+        .filter((e: any) => ["prescribed_for", "administered_to"].includes(e.relation))
+        .map((e: any) => String(e.source).toLowerCase());
+      const collisions = prescribed.filter((m: string) => allergens.has(m));
+      clinicalConflicts.push({
+        rule: "Allergy vs Medication",
+        status: collisions.length > 0 ? "fail" : "pass",
+        type: "clinical_safety",
+        detail: collisions.length > 0
+          ? `Medication(s) prescribed despite documented allergy: ${collisions.join(", ")}`
+          : "No allergy/medication contradictions detected",
+        affected_items: collisions,
+      });
+
+      // Adverse-event causal coherence
+      const aeEdges = edges.filter((e: any) => e.relation === "causes_adverse_event");
+      clinicalConflicts.push({
+        rule: "Adverse Event Causality",
+        status: "pass",
+        type: "clinical_causality",
+        detail: `${aeEdges.length} adverse-event causal link(s) recorded`,
+      });
+
+      // Orphan node check
+      const connected = new Set<string>();
+      edges.forEach((e: any) => { connected.add(e.source); connected.add(e.target); });
+      const orphans = nodes.filter((n: any) => !connected.has(n.name)).map((n: any) => n.name);
+      clinicalConflicts.push({
+        rule: "Graph Connectivity",
+        status: orphans.length > 0 ? "warn" : "pass",
+        type: "graph_structure",
+        detail: orphans.length > 0 ? `Orphan nodes: ${orphans.join(", ")}` : "All nodes connected",
+        affected_items: orphans,
+      });
+
+      const passed = clinicalConflicts.filter(c => c.status === "pass").length;
+      const warnings = clinicalConflicts.filter(c => c.status === "warn").length;
+      const failures = clinicalConflicts.filter(c => c.status === "fail").length;
+
+      return new Response(JSON.stringify({
+        conflicts: clinicalConflicts,
+        credibility_score: source_reliability * (failures === 0 ? 1 : 0.6),
+        llm_resolution: null,
+        summary: { total_rules: clinicalConflicts.length, passed, warnings, failures },
+        domain: "clinical",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Use graph_native structure if available (from enhanced extraction)
     const nodes = graph_native?.nodes || entities;

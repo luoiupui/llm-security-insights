@@ -23,6 +23,7 @@ import { sampleTestCases } from "@/lib/test-corpus";
 import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel";
 import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
+import { DomainBanner } from "@/components/DomainSwitch";
 
 const typeColors: Record<string, string> = {
   threat_actor: "bg-threat-critical/20 text-threat-critical",
@@ -532,6 +533,7 @@ export default function KGConstruction() {
 
   return (
     <div className="space-y-6">
+      <DomainBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Knowledge Graph Construction</h1>

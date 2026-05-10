@@ -107,6 +107,40 @@ CONSTRAINTS:
 - Flag hallucinated connections (no text evidence) with confidence < 0.3
 - Apply STIX 2.1 constraints: valid SDO/SRO pairings only`;
 
+const CLINICAL_GRAPH_NATIVE_PROMPT = `You are a Graph-Native Clinical Knowledge Reasoning Engine (research simulation — NOT for clinical decision support).
+
+You THINK in Knowledge Graph triples (Subject → Predicate → Object) from the very first step.
+Every observation is immediately formalized as a graph triple — never a flat entity list.
+
+═══ CLINICAL ONTOLOGY (enforced during reasoning) ═══
+Node Types (use these exact ids in the 'type' field):
+  patient, condition, medication, procedure, observation, encounter, provider, adverse_event, allergy
+Relation Types:
+  diagnosed_with, prescribed_for, administered_to, ordered_for, contraindicates,
+  causes_adverse_event, follows_protocol, indicates, treats, monitored_by, allergic_to
+Authoritative code systems to surface in the 'mitre_id' field when present in text:
+  ICD-10/11 codes (e.g. E11.9), RxNorm RXCUI (e.g. 860975), LOINC (e.g. 4548-4), SNOMED CT.
+
+═══ SAFETY CONSTRAINTS ═══
+- Treat all input as de-identified synthetic notes; never infer or restore PHI.
+- Do NOT produce treatment recommendations, diagnoses, or clinical advice — only structural KG triples grounded in the source text.
+- Flag any free-text inference without textual evidence with confidence < 0.3.
+
+═══ GRAPH-NATIVE CHAIN-OF-THOUGHT (8 Steps) ═══
+1. SEED TRIPLES — identify the central encounter and patient: (patient_X, has_encounter, encounter_Y)
+2. NODE EXPANSION — for each diagnosed condition, prescribed medication, ordered procedure, recorded observation, attach a node with confidence and an evidence_span quoted from the text. Reject anything not mappable to a node type above.
+3. RELATION INFERENCE — connect medication→condition via prescribed_for / treats; observation→condition via indicates; medication→adverse_event via causes_adverse_event; allergy→medication via contraindicates.
+4. TEMPORAL SUBGRAPH — order events by stated dates / encounter sequence; add (event_i, precedes, event_j).
+5. CAUSAL FUSION — where a medication initiation is followed by a documented adverse event, add (med, causes_adverse_event, ae) as a CAUSAL edge with reduced confidence.
+6. CONSISTENCY VALIDATION — flag: medication contraindicated by an allergy; dosage outside a plausible range; effect preceding cause; orphan nodes.
+7. CONFIDENCE PROPAGATION — propagate evidence-grounded confidence through the graph.
+8. SERIALIZATION — emit nodes / edges / subgraphs / graph_metadata / graph_warnings.
+
+CONSTRAINTS:
+- NEVER output free-text entity lists — always graph triples.
+- Every triple must cite an evidence span from the source text.
+- Out of scope: diagnosis, prescription, prognosis. KG construction only.`;
+
 const CAUSAL_SUBGRAPH_PROMPT = `You are a Causal Subgraph Reasoning Engine operating on an existing Knowledge Graph.
 
 Your input is a partially constructed KG (nodes + edges).
@@ -136,8 +170,9 @@ serve(async (req) => {
   try {
     const {
       text, mode = "full", source_type = "report", source_reliability = 0.8, rag_context = "",
-      temperature, seed, deterministic = true,
+      temperature, seed, deterministic = true, domain = "cti",
     } = await req.json();
+    const isClinical = domain === "clinical";
     // Repro: deterministic preset forces T=0 + fixed seed regardless of caller values
     const reproTemp = deterministic ? 0 : (typeof temperature === "number" ? temperature : 0.1);
     const reproSeed = deterministic ? 42 : (typeof seed === "number" ? seed : undefined);
@@ -156,7 +191,8 @@ serve(async (req) => {
       source_type,
       source_reliability,
       timestamp: new Date().toISOString(),
-      extraction_method: "graph_native_cot",  // marks our innovation
+      extraction_method: "graph_native_cot",
+      domain,
     };
 
     if (mode === "full" || mode === "ner" || mode === "re") {
@@ -165,11 +201,12 @@ serve(async (req) => {
       // within the graph-native CoT, not as sequential post-processing
       const graphResult = await callGraphNativeLLM(
         LOVABLE_API_KEY,
-        GRAPH_NATIVE_COT_PROMPT,
-        buildGraphExtractionPrompt(text, source_type, source_reliability, rag_context),
+        isClinical ? CLINICAL_GRAPH_NATIVE_PROMPT : GRAPH_NATIVE_COT_PROMPT,
+        buildGraphExtractionPrompt(text, source_type, source_reliability, rag_context, isClinical),
         "extract_knowledge_graph",
         reproTemp,
         reproSeed,
+        isClinical,
       );
       results.rag_used = !!rag_context;
       results.repro = { deterministic, temperature: reproTemp, seed: reproSeed ?? null };
@@ -234,12 +271,17 @@ ${text}`,
   }
 });
 
-function buildGraphExtractionPrompt(text: string, sourceType: string, reliability: number, ragContext: string = ""): string {
+function buildGraphExtractionPrompt(text: string, sourceType: string, reliability: number, ragContext: string = "", isClinical: boolean = false): string {
   const contextSection = ragContext
     ? `\n\n${ragContext}\n\nUse the historical context ONLY to (a) prefer canonical entity names already known, (b) ground your extraction in prior verified knowledge, (c) increase confidence for entities/relations that match prior events. Do NOT invent details that are not in the source text.\n`
     : "";
 
-  return `Construct a Knowledge Graph from the following ${sourceType} (source reliability: ${reliability}).
+  const domainHeader = isClinical
+    ? `Construct a Clinical Knowledge Graph from the following ${sourceType} (synthetic / de-identified note; reliability: ${reliability}).
+TREAT INPUT AS DE-IDENTIFIED. DO NOT generate clinical advice — only structural KG triples.`
+    : `Construct a Knowledge Graph from the following ${sourceType} (source reliability: ${reliability}).`;
+
+  return `${domainHeader}
 
 IMPORTANT: Do NOT extract entities separately. Reason in graph triples from the start.
 Every entity you identify must immediately be connected to at least one other entity via an edge.
@@ -250,6 +292,9 @@ ${text}
 Apply all 8 steps of the Graph-Native CoT. Output the complete Knowledge Graph.`;
 }
 
+const CLINICAL_NODE_TYPES = ["patient", "condition", "medication", "procedure", "observation", "encounter", "provider", "adverse_event", "allergy"];
+const CTI_NODE_TYPES = ["threat_actor", "malware", "vulnerability", "ttp", "infrastructure", "software", "campaign", "indicator", "identity"];
+
 async function callGraphNativeLLM(
   apiKey: string,
   systemPrompt: string,
@@ -257,8 +302,10 @@ async function callGraphNativeLLM(
   toolName: string,
   reproTemperature?: number,
   reproSeed?: number,
+  isClinical: boolean = false,
 ): Promise<any> {
   const tools: any[] = [];
+  const nodeTypeEnum = isClinical ? CLINICAL_NODE_TYPES : CTI_NODE_TYPES;
 
   if (toolName === "extract_knowledge_graph") {
     tools.push({
@@ -276,7 +323,7 @@ async function callGraphNativeLLM(
                 type: "object",
                 properties: {
                   name: { type: "string" },
-                  type: { type: "string", enum: ["threat_actor", "malware", "vulnerability", "ttp", "infrastructure", "software", "campaign", "indicator", "identity"] },
+                  type: { type: "string", enum: nodeTypeEnum },
                   stix_type: { type: "string", description: "STIX 2.1 SDO type" },
                   confidence: { type: "number" },
                   mitre_id: { type: "string" },
