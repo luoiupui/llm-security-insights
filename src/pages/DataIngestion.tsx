@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Upload, FileText, Globe, MessageSquare, CheckCircle, Clock, AlertCircle, RefreshCw, Layers, Code2, Cpu, Play, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useThreatPipeline } from "@/hooks/use-threat-pipeline";
+import { useDomain } from "@/contexts/DomainContext";
+import { getOntology } from "@/lib/ontology";
+import { DomainBanner } from "@/components/DomainSwitch";
 
 /* ── Static Data (Architecture Reference) ── */
 const architectureLayers = [
@@ -27,16 +30,30 @@ After initial compromise via supply chain attack (MITRE ATT&CK T1195.002), the S
 Key vulnerability exploited: CVE-2020-10148 (SolarWinds Orion API authentication bypass). Additional tools observed: RAINDROP loader, GoldMax backdoor. C2 infrastructure included IPs: 185.225.69.24 and domains: freescanonline[.]com.`;
 
 export default function DataIngestion() {
-  const [inputText, setInputText] = useState(SAMPLE_REPORT);
+  const { domain } = useDomain();
+  const ontology = getOntology(domain);
+  const [inputText, setInputText] = useState(ontology.sampleText);
   const [sourceType, setSourceType] = useState("auto");
   const pipeline = useThreatPipeline();
+  const lastDomain = useRef(domain);
 
-  const handlePreprocess = () => pipeline.runPreprocess(inputText, sourceType);
+  // When user switches domain, replace sample if textarea is unchanged from prior sample.
+  useEffect(() => {
+    if (lastDomain.current !== domain) {
+      const priorSample = getOntology(lastDomain.current).sampleText;
+      if (inputText.trim() === priorSample.trim()) {
+        setInputText(ontology.sampleText);
+      }
+      lastDomain.current = domain;
+    }
+  }, [domain, inputText, ontology.sampleText]);
+
+  const handlePreprocess = () => pipeline.runPreprocess(inputText, sourceType, domain);
   const handleExtract = async () => {
-    const pre = pipeline.preprocessing || await pipeline.runPreprocess(inputText, sourceType);
-    if (pre) await pipeline.runExtraction(pre.cleaned_text, "full", pre.source_type, pre.reliability_score);
+    const pre = pipeline.preprocessing || await pipeline.runPreprocess(inputText, sourceType, domain);
+    if (pre) await pipeline.runExtraction(pre.cleaned_text, "full", pre.source_type, pre.reliability_score, "", undefined, domain);
   };
-  const handleFullPipeline = () => pipeline.runFull(inputText, sourceType);
+  const handleFullPipeline = () => pipeline.runFull(inputText, sourceType, undefined, domain);
 
   return (
     <div className="space-y-6">
