@@ -28,7 +28,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, source_type = "auto" } = await req.json();
+    const { text, source_type = "auto", domain = "cti" } = await req.json();
 
     if (!text || typeof text !== "string") {
       return new Response(JSON.stringify({ error: "Text input required" }), {
@@ -38,7 +38,9 @@ serve(async (req) => {
     }
 
     const detectedType = source_type === "auto" ? detectSourceType(text) : source_type;
-    const result = preprocessText(text, detectedType);
+    const result = domain === "clinical"
+      ? preprocessClinical(text, detectedType)
+      : preprocessText(text, detectedType);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
