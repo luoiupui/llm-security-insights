@@ -271,12 +271,17 @@ ${text}`,
   }
 });
 
-function buildGraphExtractionPrompt(text: string, sourceType: string, reliability: number, ragContext: string = ""): string {
+function buildGraphExtractionPrompt(text: string, sourceType: string, reliability: number, ragContext: string = "", isClinical: boolean = false): string {
   const contextSection = ragContext
     ? `\n\n${ragContext}\n\nUse the historical context ONLY to (a) prefer canonical entity names already known, (b) ground your extraction in prior verified knowledge, (c) increase confidence for entities/relations that match prior events. Do NOT invent details that are not in the source text.\n`
     : "";
 
-  return `Construct a Knowledge Graph from the following ${sourceType} (source reliability: ${reliability}).
+  const domainHeader = isClinical
+    ? `Construct a Clinical Knowledge Graph from the following ${sourceType} (synthetic / de-identified note; reliability: ${reliability}).
+TREAT INPUT AS DE-IDENTIFIED. DO NOT generate clinical advice — only structural KG triples.`
+    : `Construct a Knowledge Graph from the following ${sourceType} (source reliability: ${reliability}).`;
+
+  return `${domainHeader}
 
 IMPORTANT: Do NOT extract entities separately. Reason in graph triples from the start.
 Every entity you identify must immediately be connected to at least one other entity via an edge.
@@ -287,6 +292,9 @@ ${text}
 Apply all 8 steps of the Graph-Native CoT. Output the complete Knowledge Graph.`;
 }
 
+const CLINICAL_NODE_TYPES = ["patient", "condition", "medication", "procedure", "observation", "encounter", "provider", "adverse_event", "allergy"];
+const CTI_NODE_TYPES = ["threat_actor", "malware", "vulnerability", "ttp", "infrastructure", "software", "campaign", "indicator", "identity"];
+
 async function callGraphNativeLLM(
   apiKey: string,
   systemPrompt: string,
@@ -294,8 +302,10 @@ async function callGraphNativeLLM(
   toolName: string,
   reproTemperature?: number,
   reproSeed?: number,
+  isClinical: boolean = false,
 ): Promise<any> {
   const tools: any[] = [];
+  const nodeTypeEnum = isClinical ? CLINICAL_NODE_TYPES : CTI_NODE_TYPES;
 
   if (toolName === "extract_knowledge_graph") {
     tools.push({
