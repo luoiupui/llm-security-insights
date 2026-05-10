@@ -170,8 +170,9 @@ serve(async (req) => {
   try {
     const {
       text, mode = "full", source_type = "report", source_reliability = 0.8, rag_context = "",
-      temperature, seed, deterministic = true,
+      temperature, seed, deterministic = true, domain = "cti",
     } = await req.json();
+    const isClinical = domain === "clinical";
     // Repro: deterministic preset forces T=0 + fixed seed regardless of caller values
     const reproTemp = deterministic ? 0 : (typeof temperature === "number" ? temperature : 0.1);
     const reproSeed = deterministic ? 42 : (typeof seed === "number" ? seed : undefined);
@@ -190,7 +191,8 @@ serve(async (req) => {
       source_type,
       source_reliability,
       timestamp: new Date().toISOString(),
-      extraction_method: "graph_native_cot",  // marks our innovation
+      extraction_method: "graph_native_cot",
+      domain,
     };
 
     if (mode === "full" || mode === "ner" || mode === "re") {
@@ -199,11 +201,12 @@ serve(async (req) => {
       // within the graph-native CoT, not as sequential post-processing
       const graphResult = await callGraphNativeLLM(
         LOVABLE_API_KEY,
-        GRAPH_NATIVE_COT_PROMPT,
-        buildGraphExtractionPrompt(text, source_type, source_reliability, rag_context),
+        isClinical ? CLINICAL_GRAPH_NATIVE_PROMPT : GRAPH_NATIVE_COT_PROMPT,
+        buildGraphExtractionPrompt(text, source_type, source_reliability, rag_context, isClinical),
         "extract_knowledge_graph",
         reproTemp,
         reproSeed,
+        isClinical,
       );
       results.rag_used = !!rag_context;
       results.repro = { deterministic, temperature: reproTemp, seed: reproSeed ?? null };
