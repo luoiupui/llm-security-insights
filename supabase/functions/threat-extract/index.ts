@@ -323,7 +323,7 @@ async function callGraphNativeLLM(
                 type: "object",
                 properties: {
                   name: { type: "string" },
-                  type: { type: "string", enum: ["threat_actor", "malware", "vulnerability", "ttp", "infrastructure", "software", "campaign", "indicator", "identity"] },
+                  type: { type: "string", enum: nodeTypeEnum },
                   stix_type: { type: "string", description: "STIX 2.1 SDO type" },
                   confidence: { type: "number" },
                   mitre_id: { type: "string" },
