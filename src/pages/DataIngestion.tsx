@@ -57,6 +57,7 @@ export default function DataIngestion() {
 
   return (
     <div className="space-y-6">
+      <DomainBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Data Ingestion & Architecture</h1>
