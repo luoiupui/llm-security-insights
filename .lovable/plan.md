@@ -1,72 +1,86 @@
 
-# Clinical-KG mode for ThreatGraph (simulation only)
+# Plan: LLM-KG-Bench 3.0 — adapted to evaluate the *KG generator*
 
-Goal: let the existing dashboard ingest de-identified clinical text and build a medical KG using the same pipeline, **without adding new sidebar pages or breaking the current GUI**, and without committing to PPC/FL yet.
+## 1. Feasibility (short answer)
 
-## Guiding principles
+**Yes — feasible, with a meaningful adaptation.**
 
-- **One product, two domains.** Name stays "ThreatGraph". A header toggle switches the *ontology and validators*, not the layout.
-- **No new sidebar items.** Existing pages (Data Ingestion, KG Construction, Attribution, Experiments…) work for both domains.
-- **Simulation banner everywhere** when domain = `clinical`: "Research simulation — not for clinical use. Do not paste real PHI."
-- **PPC/FL-ready, but not implemented now.** All new code accepts a `domain` field so a later FL/DP layer slots in cleanly.
+LLM-KG-Bench 3.0 (arxiv 2505.13098) is a task-oriented harness: it feeds an LLM standardized KG-engineering tasks (Turtle/RDF syntax repair, SPARQL Q&A, ontology fact retrieval, fact extraction from text → triples, etc.), auto-checks the output against a reference, and emits per-task scores. It evaluates **the model behind the API**.
 
-## Scope (this plan)
+In this project the unit under test is not a bare LLM — it is a **pipeline**: `Preprocess → Graph-Native CoT extract → KB-validate → Conflicts → KG insert`. So we cannot reuse the upstream Python harness as-is, but we **can reuse its task design, scoring rubric, and reporting model** and apply them to the pipeline's output. The "system-under-test" plug just becomes our edge-function chain instead of a raw `chat.completions` call.
 
-### A. Domain switch (UI only, no business-logic change)
-- New `DomainContext` (React) with values `cti | clinical`, persisted in `localStorage`.
-- Small `<DomainSwitch />` in `DashboardLayout` header (segmented control, two options).
-- When `clinical`: show an amber `Badge` "Clinical — simulation" next to the title; show a one-line disclaimer banner on `Data Ingestion` and `KG Construction`.
-- Sample-text buttons on `Data Ingestion` swap between CTI samples and synthetic clinical notes.
-- KG legend on `KG Construction` swaps entity-type colors/labels via the ontology config.
+Tasks that port cleanly to a KG-generator evaluator:
+- **Fact Extraction → Triples** (drop-in: paste text, compare extracted (s,p,o) against gold)
+- **Ontology Conformance** (every emitted node/edge type must be in the active ontology — CTI or Clinical)
+- **Turtle / JSON-LD Serialization** (serialize the produced subgraph; parse-check with a Turtle/JSON-LD parser)
+- **SPARQL-style Q&A** (run questions through `threat-kg-query`; compare answer sets)
+- **Schema/Type Repair** (inject malformed triples → does `kb-validate` + `threat-conflicts` reject/fix them?)
+- **Hallucination Control** (already partially implemented — formalize as a KG-Bench task)
+- **Multilingual Generalization** (reuse the JA/ZH clinical samples you already drafted as a localized task pack)
 
-### B. Ontology config (pure data)
-- New `src/lib/ontology/cti.ts` (extracted from current constants) and `src/lib/ontology/clinical.ts`:
-  - entity types, relation types, causal types, color tokens, MITRE-equivalent ID prefixes.
-- New `src/lib/ontology/index.ts` exporting `getOntology(domain)`.
-- `KGConstruction.tsx` and `Attribution.tsx` read colors/labels from `getOntology(domain)` instead of hard-coded maps. **No layout change.**
+Tasks deliberately **out of scope** (need a real triplestore or licensed ontologies): full SPARQL 1.1, OWL reasoning, DBpedia/Wikidata lookups, SHACL shape graphs. We will note these as "not implemented — requires triplestore".
 
-### C. Clinical prompt + KB seed (back-end behavior)
-- `threat-extract` accepts an optional `domain: "cti" | "clinical"` (default `cti`, fully back-compatible).
-  - `clinical` mode swaps the system prompt's entity/relation enums to: Patient, Condition, Medication, Procedure, Observation, Encounter, Provider, AdverseEvent + relations prescribed_for, diagnosed_with, contraindicates, causes_adverse_event, follows_protocol, ordered_for.
-  - Causality types unchanged (`enables / leads_to / triggers / precedes`) — they generalize.
-- `threat-preprocess` accepts `domain`. In `clinical`:
-  - **PHI-scrub safety net**: regex-mask names heuristics, dates, MRN/NHS-ID patterns, emails, phones, addresses, even on "already de-identified" input (defense in depth).
-  - Replace IOC extractors with clinical-code extractors (ICD-10, RxNorm RXCUI, LOINC, SNOMED CT IDs, dosages).
-- `kb-validate` accepts `domain`. Ships a **small seeded dictionary** (≈200 entries) of common ICD-10, RxNorm, LOINC codes for hallucination checks. Full SNOMED is out of scope (licensed, ~350k concepts).
-- `threat-conflicts` accepts `domain`. Adds clinical rules: drug-drug interaction (against tiny seed list), allergy↔medication contradiction, dosage-range sanity, contraindication.
+## 2. What gets built
 
-No DB migrations needed: `kg_entities`, `kg_relations`, `monitoring_events` already store `entity_type` / `relation` as free text. We add a `domain` field to the JSONB metadata on insert.
+### A. Task pack (pure data, no infra)
+`src/lib/kg-bench/` containing:
+- `tasks.ts` — task definitions (id, name, domain, input, gold, scorer)
+- `scorers.ts` — micro-/macro-F1 over triple sets, exact-match for serialization, set-overlap for Q&A
+- `corpus/cti.ts` and `corpus/clinical.ts` — ~15 gold-annotated cases per domain (reuse existing CTI test corpus + the JA/ZH/EN clinical samples)
 
-### D. Documentation
-- One new section in `public/reports/white-paper.md` titled "Cross-domain transferability: CTI → Clinical (simulation)" describing what is reused, what swaps, what is deliberately out of scope (real PHI, HIPAA, real SNOMED, real PPC/FL).
-- Update `mem://index.md` Core: "Two domains: CTI (default) and Clinical (simulation only). Same pipeline, swappable ontology + validators."
+### B. Runner edge function
+`supabase/functions/kg-bench-runner/index.ts`:
+- Input: `{ taskIds, domain, modelOverride? }`
+- For each task: invoke the project's existing pipeline (`threat-preprocess` → `threat-extract` → `kb-validate` → `threat-conflicts`) with `domain` propagated, then score
+- Output: per-task scores + aggregate (Bench-Score), persisted to `monitoring_events` for the dashboard
 
-## Deliberately OUT of scope (will be follow-up plans)
+### C. New "KG-Bench" tab inside the existing **Experiments** page
+**No new sidebar item.** Add a `KG-Bench` tab next to "System Test" / "Stage 1" / "Stage 2":
+- Task selector (checkbox grid grouped by category)
+- Domain badge (CTI / Clinical) reads from `DomainContext`
+- "Run Bench" button + live progress
+- Results table: task · precision · recall · F1 · pass/fail · latency
+- Radar chart: capability profile across the 7 task categories
+- Comparison toggle: "Ours (pipeline)" vs "Vanilla LLM zero-shot" (reuses existing baseline runner) — this is what makes the result **publishable as KG-generator evaluation**, not just LLM evaluation
+- "Export bench report" → JSON + Markdown under `/public/reports/`
 
-- Privacy-preserving computation (DP, k-anonymity).
-- Federated learning simulation (FedAvg over silos).
-- Real PHI handling, HIPAA/GDPR posture, auth/RBAC hardening.
-- Full SNOMED CT / RxNorm / LOINC ingestion (licensed, large).
-- A separate "Clinical" sidebar section or duplicate pages.
+### D. Documentation updates
+- `public/reports/white-paper.md`: new section *"KG-Bench: adapting LLM-KG-Bench 3.0 to evaluate a KG-generation pipeline"* — methodology, deviations from upstream, score interpretation, multilingual results
+- `public/reports/comprehensive-technical-report.md`: append latest bench scores per domain
+- `public/reports/manifest.json`: register the new bench-report artifact
+- New `mem://features/kg-bench` memory + index entry: "KG-Bench tab in Experiments; evaluates the *pipeline*, not the LLM alone; tasks port from LLM-KG-Bench 3.0; CTI + Clinical."
 
-These remain compatible: every new function already takes a `domain` parameter, so a later DP/FL layer wraps the pipeline without refactor.
+## 3. Files touched
 
-## Files touched
+**New**
+- `src/lib/kg-bench/{tasks,scorers,index}.ts`
+- `src/lib/kg-bench/corpus/{cti,clinical}.ts`
+- `src/components/KGBenchPanel.tsx`
+- `supabase/functions/kg-bench-runner/index.ts`
+- `mem://features/kg-bench`
 
-- **New**: `src/contexts/DomainContext.tsx`, `src/components/DomainSwitch.tsx`, `src/lib/ontology/{index,cti,clinical}.ts`, `src/lib/sample-corpus/clinical.ts`.
-- **Edited (UI only)**: `src/components/DashboardLayout.tsx` (mount switch + banner), `src/pages/DataIngestion.tsx` (sample picker + disclaimer), `src/pages/KGConstruction.tsx` (legend from ontology), `src/pages/Attribution.tsx` (label/color from ontology), `src/App.tsx` (wrap in `DomainProvider`), `src/lib/threat-pipeline.ts` (forward `domain` to edge functions).
-- **Edited (edge fns)**: `threat-preprocess`, `threat-extract`, `kb-validate`, `threat-conflicts` — each gets an optional `domain` arg with `cti` default; `clinical` branch adds the swaps above.
-- **Edited (docs/memory)**: `public/reports/white-paper.md`, `mem://index.md`.
+**Edited**
+- `src/pages/Experiments.tsx` — mount `<KGBenchPanel />` inside a new `TabsTrigger value="kg-bench"`
+- `public/reports/white-paper.md`, `comprehensive-technical-report.md`, `manifest.json`
+- `mem://index.md` — add reference line
 
-## Risk / size
+**Unchanged**
+- Sidebar, routing, existing pipeline edge functions, DB schema (results go into `monitoring_events.metadata` JSONB — no migration)
 
-- Pure additive change for `cti` users — default behavior is byte-identical.
-- ~600 LOC new, ~150 LOC edited across 8 existing files.
-- No DB migration, no new tables, no new secrets, no new dependencies.
+## 4. Deliberately out of scope
+- Importing the upstream Python harness (`pip install llm-kg-bench`) — runtime mismatch with edge functions; we port task *definitions* only
+- Real triplestore (Fuseki/GraphDB) for SPARQL 1.1
+- Licensed ontologies (full SNOMED CT, DBpedia dumps)
+- DP/FL wrapping of the bench runner (kept compatible — runner already takes `domain`; a later FL layer slots in)
 
-## What you'll see after build
+## 5. Risk / size
+- ~700 LOC new, ~80 LOC edited, 0 deps, 0 migrations, 0 new secrets
+- Default behavior unchanged for everyone not opening the new tab
+- Bench runs reuse existing LLM budget (Gemini via Lovable AI Gateway) — typical 15-task run ≈ 30 LLM calls
 
-1. Header gains a `CTI | Clinical` toggle.
-2. Switch to **Clinical** → amber "simulation" banner appears, sample texts on `Data Ingestion` change to synthetic discharge summaries, the KG legend on `KG Construction` shows medical entity colors.
-3. Run the same pipeline → graph nodes are Patient/Condition/Medication etc., causal links read "Drug X → AdverseEvent Y", conflicts panel flags drug-drug interactions.
-4. Switch back to **CTI** → everything behaves exactly as today.
+## 6. What you'll see after build
+1. Open **Experiments** → new **KG-Bench** tab
+2. Pick tasks (default: 7 core), click **Run Bench**
+3. Live table fills in; radar chart shows capability profile; "Ours vs vanilla-LLM" delta is the headline number
+4. Switch the header to **Clinical** → same tab, clinical task pack auto-loads, JA/ZH samples included
+5. **Export** writes `public/reports/kg-bench-<domain>-<timestamp>.{json,md}` and updates the white paper section
