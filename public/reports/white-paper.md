@@ -83,3 +83,28 @@ ontology dumps (full SNOMED CT, DBpedia). The runner exposes a `domain` paramete
 without refactor.
 
 The bench is exposed under **Experiments → KG-Bench**; runs export to Markdown for inclusion in the report bundle.
+
+## 7. Dual-Pathway Harness: deterministic vs agentic
+
+The system exposes two parallel KG-construction pathways from the same backbone model
+(`google/gemini-3-flash-preview` via Lovable AI Gateway).
+
+| Aspect             | Pathway B — Deterministic                        | Pathway A — Agent Loop                          |
+|--------------------|--------------------------------------------------|-------------------------------------------------|
+| Runtime            | Raw `fetch` to AI Gateway (fixed-order pipeline) | Vercel AI SDK `generateText` + `tool()`         |
+| Orchestration      | `src/lib/threat-pipeline.ts` + React hook        | Edge function `threat-agent` (model decides)    |
+| Stage order        | Preprocess → RAG → Extract → KB → Conflicts → Attribute → Persist | Emergent, bounded by `stopWhen(stepCountIs(50))` |
+| KG-Bench scoring   | **Yes** — per-stage gold assertions              | **No** — variable ordering invalidates assertions |
+| Use case           | Reproducible experiments, paper figures          | Demo emergent reasoning, study tool-use patterns |
+| UI                 | KG Construction page (full layout)               | `AgentLoopPanel` at top of same page (collapsible trace) |
+
+Pathway A wraps the same edge functions as tools — business logic is not duplicated.
+Tools share a server-side scratchpad so later steps reference earlier outputs without
+re-passing payloads through model context. The `persist` tool is marked
+`needsApproval` because it writes to the KG. The agent's tool-call trace is returned
+verbatim for inspection. Runs are tagged `monitoring_events.metadata.path = "agent_loop"`
+so KG-Bench's `path = "pipeline"` filter excludes them automatically.
+
+This dual design lets the same project deliver both reproducible benchmark numbers
+(Pathway B → KG-Bench) and qualitative agentic experiments (Pathway A → trace inspection)
+without one undermining the other.
