@@ -24,6 +24,7 @@ import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel
 import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
 import { DomainBanner } from "@/components/DomainSwitch";
+import { AgentLoopPanel } from "@/components/AgentLoopPanel";
 
 const typeColors: Record<string, string> = {
   threat_actor: "bg-threat-critical/20 text-threat-critical",
@@ -546,7 +547,10 @@ export default function KGConstruction() {
         )}
       </div>
 
-      {/* ── Reproducibility & Comparison Mode ─────────────────── */}
+      {/* ── Pathway A: Experimental agent loop (does not affect Pathway B below) ── */}
+      <AgentLoopPanel />
+
+      {/* ── Reproducibility & Comparison Mode (Pathway B — deterministic) ─────── */}
       <ReproPanel
         value={repro}
         preset={reproPreset}
