@@ -247,14 +247,39 @@ serve(async (req) => {
       }),
     } as const;
 
+    // ── Wrap every tool with: (a) per-domain allow-list, (b) Clinical PHI redaction on args ──
+    const allow = TOOL_ALLOWLIST[domain];
+    const guardedTools = Object.fromEntries(
+      Object.entries(tools).map(([name, t]) => {
+        const original = (t as { execute: (args: unknown) => Promise<unknown> }).execute;
+        return [name, {
+          ...(t as object),
+          execute: async (args: unknown) => {
+            if (!allow.has(name)) {
+              await logSecurityEvent({
+                event_type: "agent_tool_denied", category: "security",
+                title: `threat-agent · tool '${name}' denied in ${domain} mode`,
+                detail: "Per-domain allow-list rejected this call.",
+                metadata: { domain, tool: name },
+              });
+              return { error: `tool '${name}' is not permitted in ${domain} mode` };
+            }
+            const safeArgs = domain === "clinical" ? redactPhi(args) : args;
+            return original(safeArgs);
+          },
+        }];
+      }),
+    );
+
     const startedAt = Date.now();
     const result = await generateText({
       model,
       system: AGENT_SYSTEM_PROMPT,
       prompt: `Domain: ${domain.toUpperCase()}\nUser query: ${query ?? "Construct the most complete KG you can."}\n\nSOURCE TEXT:\n${text}`,
-      tools,
+      tools: guardedTools as typeof tools,
       stopWhen: stepCountIs(50),
     });
+
 
     // Flatten the AI SDK step trace into a UI-friendly shape.
     const trace = result.steps.map((s, i) => ({
