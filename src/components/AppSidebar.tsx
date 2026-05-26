@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Network, Brain, FlaskConical, Database,
   Shield, Settings, ChevronLeft, ChevronRight, Cpu, FileText, Github,
-  Lock, ShieldAlert,
+  Lock, ShieldAlert, ShieldOff,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -22,6 +22,7 @@ const mainItems = [
 const securityItems = [
   { title: "AI Threat Model", url: "/threat-model", icon: ShieldAlert },
   { title: "Privacy & FL Lab", url: "/privacy-fl-lab", icon: Lock },
+  { title: "Redaction Lab", url: "/redaction-lab", icon: ShieldOff },
 ];
 
 const systemItems = [
