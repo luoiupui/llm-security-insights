@@ -108,3 +108,75 @@ so KG-Bench's `path = "pipeline"` filter excludes them automatically.
 This dual design lets the same project deliver both reproducible benchmark numbers
 (Pathway B → KG-Bench) and qualitative agentic experiments (Pathway A → trace inspection)
 without one undermining the other.
+
+## 8. Security posture and forward path to privacy-preserving FL on clinical data
+
+The system is treated as a **prototype of an end-to-end secure AI platform**, not just a CTI extractor.
+Controls are layered around the existing pipeline so that the same trust boundary used today for
+CTI extraction can be reused tomorrow for clinical Privacy-Preserving Computation (PPC) and
+Federated Learning (FL) — without re-architecting.
+
+### 8.1 Recent database hardening
+
+The two RPCs exposed to the PostgREST surface — `match_threat_reports` (vector search) and
+`fetch_subgraph` (KG neighborhood) — were converted from `SECURITY DEFINER` to
+**`SECURITY INVOKER`**, and `EXECUTE` was **revoked** from the `anon`, `authenticated`, and
+`public` roles. Only the service role used by Supabase Edge Functions can invoke them.
+
+Consequence: every read of the KG now flows through a server-controlled choke point
+(an edge function) where prompt-firewall, domain check, audit logging, and (later)
+differential-privacy noise can be enforced uniformly. This is **exactly** the aggregator
+pattern FL requires — clients never read or write raw data; only the server-side aggregator does.
+
+### 8.2 AI Threat Model panel (`/threat-model`)
+
+A read-only registry (`src/lib/security/posture.ts`) maps **OWASP LLM Top-10**,
+**MITRE ATLAS**, and **NIST AI RMF** controls onto the project's existing layers
+(Data Acquisition, LLM Extraction, Agent Loop, KG Storage, UI/Reports). Each control
+is tagged `active`, `simulated`, or `planned`. A live **Prompt-Firewall Probe**
+(`src/lib/security/prompt-firewall.ts`) runs eight heuristic rules (ignore-previous,
+role-override, embedded tool-call syntax, developer-mode keywords, exfil patterns,
+oversized base64 blobs, zero-width characters, prompt-leak requests) and produces a
+verdict (`clean | suspicious | blocked`) with a 0–1 risk score.
+
+### 8.3 Privacy & FL Lab (`/privacy-fl-lab`) — five tabs
+
+Active only in **Clinical** domain. Pure browser-side simulation, but each tab is
+implemented end-to-end on synthetic notes so the research story holds.
+
+| Tab | Implementation | Purpose |
+|---|---|---|
+| De-identification | HIPAA Safe Harbor checklist + per-note scrub diff + residual-risk score | Visualizes the existing PHI safety net |
+| Differential Privacy | Laplace mechanism (`dp.ts`), ε slider, utility-vs-ε curve over KG aggregate counts | Shows the cost of privacy for downstream analytics |
+| Federated Learning | `FedAvg` simulator (`fl-fedavg.ts`) on synthetic 8-D embeddings, N hospital shards, per-round loss + shard divergence vs centralized | Demonstrates the FL training loop end-to-end |
+| Secure Aggregation | Pairwise-mask sum protocol (`secure-agg.ts`), animated cancellation | Illustrates that the server sees only the sum (labeled "not cryptographically secure") |
+| Membership-Inference Probe | Shadow-model attack on the toy FL classifier | Quantifies leakage and how the chosen ε reduces it |
+
+### 8.4 Why the current work is a port, not a detour
+
+Every control added for CTI security is reused when the simulator is swapped for a real
+FL client on clinical data:
+
+- **Edge-function-only DB writes + SECURITY INVOKER RPC** → FL aggregator trust boundary.
+- **Domain switch + ontology-bound output guard** → sandbox boundary required before
+  any clinical-context payload leaves the client shard.
+- **`needsApproval` on `persist` + audit log via `monitoring_events`** → IRB-style
+  review trail for FL rounds.
+- **Pathway B (deterministic, KG-Bench scored) vs Pathway A (agent loop, experimental)**
+  → the same split FL needs between reproducible production rounds and exploratory ones.
+
+### 8.5 Extension ports
+
+The implementation is structured so each simulated component has a single, documented
+swap point:
+
+| Simulated today | Replaceable with | Swap point |
+|---|---|---|
+| Browser `dp.ts` Laplace mechanism | Server-side DP wrapper around `threat-kg-query` | Edge function pre-return hook |
+| `fl-fedavg.ts` on synthetic shards | Real FL client (Flower / NVFlare) per hospital | `fl-fedavg.ts` `runFedAvg` interface |
+| `secure-agg.ts` pairwise-mask demo | Bonawitz secure aggregation library | Same function signature |
+| Heuristic `prompt-firewall.ts` | LLM-based judge or Guardrails AI rules | Same `scanPrompt` return type |
+| Synthetic clinical corpus | Real de-identified clinical notes under DUA | `src/lib/test-corpus.ts` |
+
+No business logic in the extraction/KG/KG-Bench pipeline is rewritten when these
+swaps happen — only the implementations behind these interfaces change.
