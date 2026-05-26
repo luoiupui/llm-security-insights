@@ -221,7 +221,6 @@ export default function RedactionLab() {
           </div>
         )}
       </div>
-    </DashboardLayout>
   );
 }
 
