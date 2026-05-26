@@ -1,0 +1,21 @@
+{
+  "domain": "clinical",
+  "version": "1.0.0",
+  "source": "HIPAA Safe Harbor §164.514(b)(2)(i) — 18 identifiers",
+  "rules": [
+    { "id": "HIPAA-A", "axis": "pii", "pattern": "\\b[A-Z][a-z]+ [A-Z][a-z]+\\b", "type": "Person", "action": "redact", "placeholder": "PERSON", "rationale": "Patient/relative name" },
+    { "id": "HIPAA-B", "axis": "pii", "pattern": "\\b\\d{3}-?\\d{2}-?\\d{4}\\b", "type": "SSN", "action": "redact", "placeholder": "SSN", "rationale": "Social Security number" },
+    { "id": "HIPAA-C", "axis": "pii", "pattern": "\\bMRN[-:\\s]?\\d{4,}\\b", "type": "MRN", "action": "redact", "placeholder": "MRN", "rationale": "Medical record number" },
+    { "id": "HIPAA-D", "axis": "pii", "pattern": "\\b(19|20)\\d{2}-\\d{2}-\\d{2}\\b", "type": "Date", "action": "redact", "placeholder": "DATE", "rationale": "Dates more precise than year" },
+    { "id": "HIPAA-E", "axis": "pii", "pattern": "\\b\\d{5}(?:-\\d{4})?\\b", "type": "ZIP", "action": "generalize", "placeholder": "ZIP3", "rationale": "ZIP — keep first 3 if pop > 20k" },
+    { "id": "HIPAA-F", "axis": "pii", "pattern": "\\b[\\w.+-]+@[\\w-]+\\.[\\w.-]+\\b", "type": "Email", "action": "redact", "placeholder": "EMAIL", "rationale": "Email address" },
+    { "id": "HIPAA-G", "axis": "pii", "pattern": "\\b\\+?\\d{1,3}[-.\\s]?\\(?\\d{2,4}\\)?[-.\\s]?\\d{3,4}[-.\\s]?\\d{3,4}\\b", "type": "Phone", "action": "redact", "placeholder": "PHONE", "rationale": "Phone or fax" },
+    { "id": "HIPAA-H", "axis": "pii", "pattern": "\\b(?:age|aged)\\s+(9\\d|1\\d{2})\\b", "type": "AgeOver89", "action": "redact", "placeholder": "AGE90+", "rationale": "Ages > 89 must be grouped" }
+  ],
+  "ontology_overrides": {
+    "patient.mrn": "ALWAYS_REDACT",
+    "patient.dob": "ALWAYS_REDACT",
+    "diagnosis.icd10": "RELEASE",
+    "medication.rxcui": "RELEASE"
+  }
+}

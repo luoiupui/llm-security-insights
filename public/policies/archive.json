@@ -1,0 +1,17 @@
+{
+  "domain": "archive",
+  "version": "1.0.0",
+  "source": "Federated: Wikidata + GeoNames + LCSH + community gazetteer stub",
+  "rules": [
+    { "id": "ARCH-LIVING", "axis": "pii", "type": "Person", "action": "redact", "placeholder": "PERSON", "rationale": "Person presumed living: no Wikidata date_of_death OR died < 70y ago", "condition": "resolver.wikidata.date_of_death == null || (now.year - resolver.wikidata.date_of_death.year) < 70" },
+    { "id": "ARCH-RELATIVE-LIVING", "axis": "pii", "type": "Person", "action": "redact", "placeholder": "PERSON-REL", "rationale": "Named relative of a living person", "condition": "resolver.local.relative_of_living == true" },
+    { "id": "ARCH-CULTURAL", "axis": "cultural", "type": "Term", "action": "redact", "placeholder": "CULT-TERM", "rationale": "Term flagged by community gazetteer as ceremonial/sacred/restricted", "condition": "resolver.community.cultural_flag in [\"sacred\",\"ceremonial\",\"restricted\"]" },
+    { "id": "ARCH-SEALED", "axis": "legal_restricted", "type": "Document", "action": "redact_document", "placeholder": "SEALED-UNTIL-{year}", "rationale": "Court / adoption / juvenile record sealed until release year", "condition": "doc.metadata.sealed_until > now.year" },
+    { "id": "ARCH-INDIGENOUS-PLACE", "axis": "cultural", "type": "Place", "action": "generalize", "placeholder": "REGION", "rationale": "Sacred-site precise coordinates suppressed; region only", "condition": "resolver.geonames.sacred_site_flag == true" }
+  ],
+  "ontology_overrides": {
+    "person.date_of_death": "RELEASE",
+    "place.country": "RELEASE",
+    "place.exact_coords": "CONDITIONAL"
+  }
+}

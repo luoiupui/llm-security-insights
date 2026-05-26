@@ -1,0 +1,35 @@
+{
+  "_meta": { "domain": "clinical", "synthetic": true, "note": "No real PHI. All names/MRNs/dates fabricated." },
+  "docs": [
+    {
+      "id": "cl-phi-1",
+      "lang": "en",
+      "text": "Patient John Smith, MRN-481923, DOB 1952-04-12, presented on 2026-03-14 with chest pain. Diagnosed with acute MI (I21.9). Prescribed Aspirin (RxCUI 1191). Discharged to 02138.",
+      "gold": [
+        { "start": 8, "end": 18, "axis": "pii", "rule_id": "HIPAA-A", "action": "redact" },
+        { "start": 20, "end": 30, "axis": "pii", "rule_id": "HIPAA-C", "action": "redact" },
+        { "start": 36, "end": 46, "axis": "pii", "rule_id": "HIPAA-D", "action": "redact" },
+        { "start": 60, "end": 70, "axis": "pii", "rule_id": "HIPAA-D", "action": "redact" }
+      ]
+    },
+    {
+      "id": "cl-phi-2",
+      "lang": "en",
+      "text": "Sarah Chen (aged 94) admitted 2026-01-08. Type 2 diabetes (E11.9). Contact: sarah.chen@example.org, phone 617-555-0142.",
+      "gold": [
+        { "start": 0, "end": 10, "axis": "pii", "rule_id": "HIPAA-A", "action": "redact" },
+        { "start": 12, "end": 21, "axis": "pii", "rule_id": "HIPAA-H", "action": "redact" },
+        { "start": 31, "end": 41, "axis": "pii", "rule_id": "HIPAA-D", "action": "redact" }
+      ]
+    },
+    {
+      "id": "cl-phi-ja-1",
+      "lang": "ja",
+      "text": "患者: 田中太郎 (MRN-220045), 生年月日 1948-09-30。心筋梗塞 (I21.9) 診断。",
+      "gold": [
+        { "start": 9, "end": 19, "axis": "pii", "rule_id": "HIPAA-C", "action": "redact" },
+        { "start": 26, "end": 36, "axis": "pii", "rule_id": "HIPAA-D", "action": "redact" }
+      ]
+    }
+  ]
+}

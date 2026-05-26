@@ -1,0 +1,18 @@
+{
+  "domain": "cti",
+  "version": "1.0.0",
+  "source": "FIRST TLP 2.0 + STIX 2.1 marking-definition",
+  "rules": [
+    { "id": "TLP-RED", "axis": "security_classified", "pattern": "TLP[:\\s]?RED", "type": "Marking", "action": "redact_document", "placeholder": "TLP-RED-BLOCK", "rationale": "Recipients only; never share outside specific exchange" },
+    { "id": "TLP-AMBER", "axis": "security_classified", "pattern": "TLP[:\\s]?AMBER(?:\\+STRICT)?", "type": "Marking", "action": "redact_attribution", "placeholder": "ORG-REDACTED", "rationale": "Limited disclosure; strip org-identifying attribution" },
+    { "id": "CVE-DRAFT", "axis": "security_classified", "pattern": "CVE-\\d{4}-RESERVED|CVE-DRAFT-\\w+", "type": "Vulnerability", "action": "redact", "placeholder": "CVE-EMBARGOED", "rationale": "Pre-disclosure embargo" },
+    { "id": "INTERNAL-IP", "axis": "pii", "pattern": "\\b(?:10|172\\.(?:1[6-9]|2\\d|3[01])|192\\.168)\\.\\d{1,3}\\.\\d{1,3}\\b", "type": "InternalIP", "action": "redact", "placeholder": "INT-IP", "rationale": "Defender infrastructure" },
+    { "id": "VICTIM-ORG", "axis": "legal_restricted", "pattern": "\\b(?:Acme|VictimCorp)[\\w &]*\\b", "type": "Organization", "action": "pseudonymize", "placeholder": "VICTIM-ORG-1", "rationale": "Victim attribution per breach-notification law" }
+  ],
+  "ontology_overrides": {
+    "threat_actor.alias": "RELEASE",
+    "malware.hash": "RELEASE",
+    "victim.org_name": "ALWAYS_REDACT",
+    "indicator.internal_ip": "ALWAYS_REDACT"
+  }
+}
