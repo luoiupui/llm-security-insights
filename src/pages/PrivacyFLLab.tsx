@@ -11,6 +11,16 @@ import { useDomain } from "@/contexts/DomainContext";
 import { utilityCurve, privatizeCount } from "@/lib/privacy/dp";
 import { runFedAvg, FLRunResult } from "@/lib/privacy/fl-fedavg";
 import { runSecureAgg } from "@/lib/privacy/secure-agg";
+import { supabase } from "@/integrations/supabase/client";
+
+async function logPrivacyEvent(title: string, detail: string, metadata: Record<string, unknown>) {
+  try {
+    await (supabase.from("monitoring_events" as any) as any).insert({
+      event_type: "privacy_lab_run", category: "privacy", title, detail, metadata,
+    });
+  } catch { /* RLS or offline — non-blocking */ }
+}
+
 
 /* ── HIPAA Safe Harbor 18 identifiers ── */
 const SAFE_HARBOR = [
@@ -70,10 +80,17 @@ export default function PrivacyFLLab() {
   const runFL = () => {
     setFlBusy(true);
     setTimeout(() => {
-      setFlResult(runFedAvg({ clients: 5, rounds: 12, samplesPerClient: 80 }));
+      const r = runFedAvg({ clients: 5, rounds: 12, samplesPerClient: 80 });
+      setFlResult(r);
       setFlBusy(false);
+      void logPrivacyEvent(
+        `FedAvg sim · acc ${(r.federatedFinalAcc * 100).toFixed(1)}% · gap ${(r.gap * 100).toFixed(1)}pp`,
+        "5 hospital shards · 12 rounds · synthetic 8-D embeddings",
+        { clients: 5, rounds: 12, federatedFinalAcc: r.federatedFinalAcc, gap: r.gap, domain },
+      );
     }, 50);
   };
+
 
   // Secure agg
   const agg = useMemo(() => runSecureAgg([42, 31, 58, 19, 27]), []);
