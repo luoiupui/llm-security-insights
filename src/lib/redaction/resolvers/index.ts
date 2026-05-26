@@ -4,7 +4,7 @@
  * stub-cached against JSON fixtures (no live HTTPS — simulation only).
  * The `local` adapter handles project-specific exceptions in-memory.
  */
-import { LRUCache } from "./cache";
+import { LRUCache } from "../cache";
 import wikidata from "./fixtures/wikidata.json";
 import geonames from "./fixtures/geonames.json";
 import lcsh from "./fixtures/lcsh.json";
