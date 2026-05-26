@@ -1,0 +1,31 @@
+{
+  "_meta": { "domain": "cti", "synthetic": true },
+  "docs": [
+    {
+      "id": "cti-tlp-1",
+      "lang": "en",
+      "text": "TLP:RED — Acme Corp was compromised by APT-29 via SUNBURST. Internal C2: 10.4.7.21. CVE-2020-10148 exploited.",
+      "gold": [
+        { "start": 0, "end": 7, "axis": "security_classified", "rule_id": "TLP-RED", "action": "redact_document" },
+        { "start": 10, "end": 19, "axis": "legal_restricted", "rule_id": "VICTIM-ORG", "action": "pseudonymize" },
+        { "start": 73, "end": 83, "axis": "pii", "rule_id": "INTERNAL-IP", "action": "redact" }
+      ]
+    },
+    {
+      "id": "cti-tlp-2",
+      "lang": "en",
+      "text": "TLP:GREEN — Lazarus Group deployed WannaCry exploiting CVE-2017-0144 (EternalBlue) on Windows hosts.",
+      "gold": []
+    },
+    {
+      "id": "cti-tlp-3",
+      "lang": "en",
+      "text": "TLP:AMBER+STRICT — VictimCorp Financial reported intrusion. Pre-disclosure CVE-2026-RESERVED chain.",
+      "gold": [
+        { "start": 0, "end": 16, "axis": "security_classified", "rule_id": "TLP-AMBER", "action": "redact_attribution" },
+        { "start": 19, "end": 39, "axis": "legal_restricted", "rule_id": "VICTIM-ORG", "action": "pseudonymize" },
+        { "start": 74, "end": 91, "axis": "security_classified", "rule_id": "CVE-DRAFT", "action": "redact" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "_meta": { "source": "GeoNames (stub fixtures, captured 2026-05)", "format": "place_name -> { country, admin1, sacred_site_flag, population }" },
+  "Paris": { "country": "FR", "admin1": "Île-de-France", "sacred_site_flag": false, "population": 2161000 },
+  "Uluru": { "country": "AU", "admin1": "Northern Territory", "sacred_site_flag": true, "population": 0 },
+  "Mount Taranaki": { "country": "NZ", "admin1": "Taranaki", "sacred_site_flag": true, "population": 0 },
+  "Greenfield": { "country": "US", "admin1": "MA", "sacred_site_flag": false, "population": 17000 },
+  "Bear Butte": { "country": "US", "admin1": "SD", "sacred_site_flag": true, "population": 0 }
+}

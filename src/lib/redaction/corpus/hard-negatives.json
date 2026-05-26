@@ -1,0 +1,40 @@
+{
+  "_meta": { "domain": "mixed", "note": "Documents that look sensitive but are NOT — measures over-redaction" },
+  "docs": [
+    {
+      "id": "hn-1",
+      "lang": "en",
+      "metadata": { "year": 2024 },
+      "text": "Marie Curie discovered polonium and radium in 1898. She won two Nobel Prizes.",
+      "gold": []
+    },
+    {
+      "id": "hn-2",
+      "lang": "en",
+      "metadata": { "year": 2024 },
+      "text": "Public CVE-2021-44228 (Log4Shell) disclosed in December 2021. Patched widely.",
+      "gold": []
+    },
+    {
+      "id": "hn-3",
+      "lang": "en",
+      "metadata": { "year": 2024 },
+      "text": "Ada Lovelace, born 1815, wrote the first algorithm intended for a machine.",
+      "gold": []
+    },
+    {
+      "id": "hn-4",
+      "lang": "en",
+      "metadata": { "year": 2024 },
+      "text": "Winston Churchill served as Prime Minister during World War II. His speeches are public record.",
+      "gold": []
+    },
+    {
+      "id": "hn-5",
+      "lang": "en",
+      "metadata": { "year": 2024 },
+      "text": "The city of Paris had a population of about 2.1 million in 2020. The Eiffel Tower opened in 1889.",
+      "gold": []
+    }
+  ]
+}

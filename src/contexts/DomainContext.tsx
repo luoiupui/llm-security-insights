@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
-export type Domain = "cti" | "clinical";
+export type Domain = "cti" | "clinical" | "archive";
 
 interface DomainContextValue {
   domain: Domain;
@@ -15,7 +15,8 @@ export function DomainProvider({ children }: { children: ReactNode }) {
   const [domain, setDomainState] = useState<Domain>(() => {
     if (typeof window === "undefined") return "cti";
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === "clinical" ? "clinical" : "cti";
+    if (stored === "clinical" || stored === "archive" || stored === "cti") return stored;
+    return "cti";
   });
 
   useEffect(() => {

@@ -1,0 +1,8 @@
+{
+  "_meta": { "source": "Library of Congress Subject Headings (stub fixtures)", "format": "term -> { lcsh_id, broader, cultural_flag }" },
+  "ceremony": { "lcsh_id": "sh85022413", "broader": ["Rites and ceremonies"], "cultural_flag": null },
+  "sweat lodge": { "lcsh_id": "sh85130828", "broader": ["Indigenous religions"], "cultural_flag": "ceremonial" },
+  "potlatch": { "lcsh_id": "sh85105341", "broader": ["Indigenous customs"], "cultural_flag": "ceremonial" },
+  "kiva": { "lcsh_id": "sh85072269", "broader": ["Pueblo architecture"], "cultural_flag": "sacred" },
+  "songline": { "lcsh_id": "sh96005412", "broader": ["Aboriginal Australian"], "cultural_flag": "restricted" }
+}

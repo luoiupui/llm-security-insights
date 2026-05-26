@@ -365,3 +365,35 @@ boundary; and a new KG-Bench Category 8 scores the redactor on its own terms wit
 
 *End of general white paper. See `public/reports/white-paper.md` for the original CTI/Clinical edition and
 `docs/roadmap/security_privacy_roadmap.mmd` for the Mermaid source of Part II.*
+
+---
+
+## §9.10 Implementation Status (added 2026-05-26)
+
+The §9 architecture is now shipped as a runnable simulation. Scope: full architecture with stub-cached resolvers (no live HTTPS), static JSON policies, one-way masking, KG-Bench Category 8 scorer.
+
+### Shipped
+
+| Layer | Artifact | Notes |
+|---|---|---|
+| Policy | `public/policies/{clinical,cti,archive}.json` | Version-controlled in GitHub. HIPAA Safe-Harbor + TLP/STIX + Archive federated rules. |
+| Resolvers | `src/lib/redaction/resolvers/index.ts` | Wikidata + GeoNames + LCSH + Local. Stub-cached against bundled fixtures. |
+| Cache | `src/lib/redaction/cache.ts` | LRU, 512-entry default. |
+| Guard | `src/lib/redaction/guard.ts` | Non-downgrade rule + overlap dedupe. |
+| Mask | `src/lib/redaction/mask.ts` | Typed placeholders; HTML diff renderer for the UI. |
+| Pipeline | `src/lib/redaction/pipeline.ts` | Detect → Resolve → Adjudicate (opt-in) → Guard → Mask. |
+| LLM adjudicator | `supabase/functions/redaction-adjudicate/index.ts` | `google/gemini-3-flash-preview` via Lovable AI Gateway. JSON-mode. |
+| KG-Bench Cat 8 | `scoreRedactionSpans` in `src/lib/kg-bench/scorers.ts` | `0.5·F1 + 0.3·utility − 0.2·over_redaction`. |
+| Corpus | `src/lib/redaction/corpus/{clinical-phi,cti-tlp,archive,hard-negatives}.json` | Synthetic, with gold sidecars and EN/JA samples. |
+| UI | `src/pages/RedactionLab.tsx` + route `/redaction-lab` | Diff view, axis legend, policy trace, per-doc Cat-8 score, simulation banner. |
+| Domain switch | `src/contexts/DomainContext.tsx` | Extended to `cti | clinical | archive`. |
+
+### Forward-port (not shipped)
+
+- Live Wikidata / GeoNames HTTPS calls (stub-cached only)
+- Reversible masking (one-way only by design — see §9.6)
+- Editable `sensitivity_policies` table + approval workflow (static JSON for now)
+- Real archive corpus under a Data-Use Agreement
+- MIA probe on redacted output
+- Pathway-A agent tool `propose_policy_entry` (drafted in plan, deferred)
+

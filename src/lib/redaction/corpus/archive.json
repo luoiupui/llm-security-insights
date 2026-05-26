@@ -1,0 +1,41 @@
+{
+  "_meta": { "domain": "archive", "synthetic": true, "note": "Synthetic historical excerpts with sensitivity overlays" },
+  "docs": [
+    {
+      "id": "arch-1",
+      "lang": "en",
+      "metadata": { "year": 1962, "sealed_until": null },
+      "text": "Letter from Eleanor Whitfield to her son Thomas Brennan, dated March 1962, discussing the family estate in Greenfield.",
+      "gold": [
+        { "start": 12, "end": 30, "axis": "pii", "rule_id": "ARCH-LIVING", "action": "redact" },
+        { "start": 41, "end": 56, "axis": "pii", "rule_id": "ARCH-RELATIVE-LIVING", "action": "redact" }
+      ]
+    },
+    {
+      "id": "arch-2",
+      "lang": "en",
+      "metadata": { "year": 1923, "sealed_until": null },
+      "text": "Marie Curie's 1923 correspondence with Albert Einstein on radium decay constants. Held by the Sorbonne archive.",
+      "gold": []
+    },
+    {
+      "id": "arch-3",
+      "lang": "en",
+      "metadata": { "year": 1898, "sealed_until": null },
+      "text": "Anthropologist's field notes describing a sweat lodge ceremony at Bear Butte, transcribed verbatim.",
+      "gold": [
+        { "start": 42, "end": 53, "axis": "cultural", "rule_id": "ARCH-CULTURAL", "action": "redact" },
+        { "start": 67, "end": 77, "axis": "cultural", "rule_id": "ARCH-INDIGENOUS-PLACE", "action": "generalize" }
+      ]
+    },
+    {
+      "id": "arch-4",
+      "lang": "en",
+      "metadata": { "year": 1975, "sealed_until": 2030 },
+      "text": "Juvenile court file 1975-J-441. Subject: minor, name withheld. Disposition: 18-month probation.",
+      "gold": [
+        { "start": 0, "end": 95, "axis": "legal_restricted", "rule_id": "ARCH-SEALED", "action": "redact_document" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "_meta": { "source": "Wikidata SPARQL (stub fixtures, captured 2026-05)", "format": "entity_name -> { qid, date_of_death, occupation, country }" },
+  "Marie Curie": { "qid": "Q7186", "date_of_death": "1934-07-04", "occupation": ["physicist", "chemist"], "country": "France" },
+  "Albert Einstein": { "qid": "Q937", "date_of_death": "1955-04-18", "occupation": ["physicist"], "country": "Germany" },
+  "Eleanor Whitfield": { "qid": null, "date_of_death": null, "occupation": [], "country": null },
+  "Thomas Brennan": { "qid": null, "date_of_death": null, "occupation": [], "country": null },
+  "John Smith": { "qid": null, "date_of_death": null, "occupation": [], "country": null },
+  "Ada Lovelace": { "qid": "Q7259", "date_of_death": "1852-11-27", "occupation": ["mathematician"], "country": "United Kingdom" },
+  "Winston Churchill": { "qid": "Q8016", "date_of_death": "1965-01-24", "occupation": ["politician"], "country": "United Kingdom" }
+}
