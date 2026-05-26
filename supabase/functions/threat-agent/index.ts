@@ -23,6 +23,45 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// ── Per-domain tool allow-list. Anything not in the set is blocked. ──
+const TOOL_ALLOWLIST: Record<"cti" | "clinical", Set<string>> = {
+  cti: new Set(["preprocess", "retrieve", "extract", "kb_validate", "detect_conflicts", "attribute", "finish"]),
+  // Clinical drops `attribute` (no actor attribution on patients) and `retrieve` (no cross-cohort RAG).
+  clinical: new Set(["preprocess", "extract", "kb_validate", "detect_conflicts", "finish"]),
+};
+
+// ── PHI-shaped arg redaction for Clinical mode (defense in depth) ──
+const PHI_PATTERNS: Array<[RegExp, string]> = [
+  [/\bMRN[:\s#]*\d{4,}\b/gi, "MRN [REDACTED]"],
+  [/\bDOB\s*\d{4}-\d{2}-\d{2}\b/gi, "DOB [REDACTED]"],
+  [/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]"],
+  [/\(\d{3}\)\s*\d{3}-\d{4}/g, "[PHONE]"],
+  [/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN]"],
+];
+function redactPhi(v: unknown): unknown {
+  if (typeof v === "string") {
+    let s = v;
+    for (const [re, rep] of PHI_PATTERNS) s = s.replace(re, rep);
+    return s;
+  }
+  if (Array.isArray(v)) return v.map(redactPhi);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = redactPhi(val);
+    return out;
+  }
+  return v;
+}
+async function logSecurityEvent(payload: Record<string, unknown>) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/monitoring_events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: "return=minimal" },
+      body: JSON.stringify(payload),
+    });
+  } catch { /* never block agent on logging */ }
+}
+
 async function invokeFn(name: string, body: unknown): Promise<unknown> {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
     method: "POST",
@@ -37,6 +76,7 @@ async function invokeFn(name: string, body: unknown): Promise<unknown> {
   if (!r.ok) throw new Error(`${name} ${r.status}: ${text.slice(0, 300)}`);
   try { return JSON.parse(text); } catch { return text; }
 }
+
 
 const AGENT_SYSTEM_PROMPT = `You are ThreatGraph-Agent — an autonomous knowledge-graph construction agent.
 
@@ -207,14 +247,39 @@ serve(async (req) => {
       }),
     } as const;
 
+    // ── Wrap every tool with: (a) per-domain allow-list, (b) Clinical PHI redaction on args ──
+    const allow = TOOL_ALLOWLIST[domain];
+    const guardedTools = Object.fromEntries(
+      Object.entries(tools).map(([name, t]) => {
+        const original = (t as { execute: (args: unknown) => Promise<unknown> }).execute;
+        return [name, {
+          ...(t as object),
+          execute: async (args: unknown) => {
+            if (!allow.has(name)) {
+              await logSecurityEvent({
+                event_type: "agent_tool_denied", category: "security",
+                title: `threat-agent · tool '${name}' denied in ${domain} mode`,
+                detail: "Per-domain allow-list rejected this call.",
+                metadata: { domain, tool: name },
+              });
+              return { error: `tool '${name}' is not permitted in ${domain} mode` };
+            }
+            const safeArgs = domain === "clinical" ? redactPhi(args) : args;
+            return original(safeArgs);
+          },
+        }];
+      }),
+    );
+
     const startedAt = Date.now();
     const result = await generateText({
       model,
       system: AGENT_SYSTEM_PROMPT,
       prompt: `Domain: ${domain.toUpperCase()}\nUser query: ${query ?? "Construct the most complete KG you can."}\n\nSOURCE TEXT:\n${text}`,
-      tools,
+      tools: guardedTools as typeof tools,
       stopWhen: stepCountIs(50),
     });
+
 
     // Flatten the AI SDK step trace into a UI-friendly shape.
     const trace = result.steps.map((s, i) => ({

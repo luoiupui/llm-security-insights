@@ -180,3 +180,15 @@ swap point:
 
 No business logic in the extraction/KG/KG-Bench pipeline is rewritten when these
 swaps happen — only the implementations behind these interfaces change.
+
+## §8.5 Wiring update — defenses moved from UI to trust boundary
+
+Three controls previously marked "planned, not yet wired" in §8 are now wired end-to-end:
+
+1. **Server-side prompt-firewall in `threat-extract`.** The same heuristic rules that the UI Threat Model probe runs are mirrored inside the edge function (`serverScanPrompt`). Verdict `blocked` returns HTTP 422; any non-clean verdict is appended to `monitoring_events` as `prompt_firewall_hit` (category `security`). Callers cannot bypass the firewall by skipping the UI.
+
+2. **Per-domain tool allow-list + PHI redaction in `threat-agent`.** `TOOL_ALLOWLIST` is the trust boundary for the agent loop: in Clinical mode `attribute` and `retrieve` are disallowed (no actor attribution on patients, no cross-cohort RAG). Denied calls are logged as `agent_tool_denied`. In Clinical mode every tool argument is passed through `redactPhi` (MRN, DOB, email, phone, SSN regex set) before the wrapped edge function ever sees it.
+
+3. **`monitoring_events` audit trail.** A scoped INSERT policy (`monitoring_events_public_insert`) permits anon/authenticated writes for categories `security|privacy|acceptance|experiment|pipeline` only. The Threat Model page debounce-logs each non-clean firewall probe; the Privacy & FL Lab logs each FedAvg simulation run with its final accuracy, gap, and shard count. SelfMonitoringPanel surfaces both alongside pipeline events, producing a single observable security/privacy control plane.
+
+Together these close the gap between "decorative UI guard" and "real trust boundary" without changing any of the public APIs or breaking KG-Bench gold.

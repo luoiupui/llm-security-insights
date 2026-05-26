@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Shield, Filter, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { POSTURE, STATE_META, ControlState } from "@/lib/security/posture";
 import { scanPrompt } from "@/lib/security/prompt-firewall";
+import { supabase } from "@/integrations/supabase/client";
+
 
 const LAYERS = [
   "Data Acquisition",
@@ -27,6 +29,22 @@ export default function AISystemThreatModel() {
   );
   const [probeText, setProbeText] = useState(SAMPLE_INJECTION);
   const result = useMemo(() => scanPrompt(probeText), [probeText]);
+
+  // Audit-log every non-clean probe to monitoring_events so the SelfMonitoringPanel surfaces it.
+  useEffect(() => {
+    if (result.verdict === "clean") return;
+    const t = setTimeout(() => {
+      void (supabase.from("monitoring_events" as any) as any).insert({
+        event_type: "prompt_firewall_probe",
+        category: "security",
+        title: `Threat Model probe · ${result.verdict} (score ${result.score.toFixed(2)})`,
+        detail: result.findings.map((f) => `${f.severity}:${f.rule}`).join(", "),
+        metadata: { source: "ui_probe", findings: result.findings, score: result.score, verdict: result.verdict },
+      });
+    }, 800); // debounce so typing doesn't spam the log
+    return () => clearTimeout(t);
+  }, [result]);
+
 
   const counts = useMemo(() => {
     const c: Record<ControlState, number> = { active: 0, simulated: 0, planned: 0 };
