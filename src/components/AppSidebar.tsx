@@ -1,6 +1,7 @@
 import {
   LayoutDashboard, Network, Brain, FlaskConical, Database,
-  Shield, Settings, ChevronLeft, ChevronRight, Cpu, FileText, Github
+  Shield, Settings, ChevronLeft, ChevronRight, Cpu, FileText, Github,
+  Lock, ShieldAlert,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -16,6 +17,11 @@ const mainItems = [
   { title: "KG Construction", url: "/kg-construction", icon: Network },
   { title: "Attribution Reasoning", url: "/attribution", icon: Brain },
   { title: "Experiments", url: "/experiments", icon: FlaskConical },
+];
+
+const securityItems = [
+  { title: "AI Threat Model", url: "/threat-model", icon: ShieldAlert },
+  { title: "Privacy & FL Lab", url: "/privacy-fl-lab", icon: Lock },
 ];
 
 const systemItems = [
@@ -60,6 +66,30 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
+                      className="hover:bg-sidebar-accent/50 transition-colors"
+                      activeClassName="bg-primary/10 text-primary border-l-2 border-primary"
+                    >
+                      <item.icon className="w-4 h-4 mr-2 shrink-0" />
+                      {!collapsed && <span className="text-sm">{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
+            {!collapsed && "Security & Privacy"}
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {securityItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
                       className="hover:bg-sidebar-accent/50 transition-colors"
                       activeClassName="bg-primary/10 text-primary border-l-2 border-primary"
                     >

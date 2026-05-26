@@ -15,6 +15,8 @@ import ThreatFeed from "./pages/ThreatFeed";
 import SettingsPage from "./pages/SettingsPage";
 import ImplementationLog from "./pages/ImplementationLog";
 import GitHubSync from "./pages/GitHubSync";
+import AISystemThreatModel from "./pages/AISystemThreatModel";
+import PrivacyFLLab from "./pages/PrivacyFLLab";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +39,8 @@ const App = () => (
             <Route path="/threat-feed" element={<ThreatFeed />} />
             <Route path="/implementation-log" element={<ImplementationLog />} />
             <Route path="/github-sync" element={<GitHubSync />} />
+            <Route path="/threat-model" element={<AISystemThreatModel />} />
+            <Route path="/privacy-fl-lab" element={<PrivacyFLLab />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
