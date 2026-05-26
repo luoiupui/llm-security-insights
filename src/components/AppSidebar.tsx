@@ -83,6 +83,34 @@ export function AppSidebar() {
           <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
             {!collapsed && "System"}
           </SidebarGroupLabel>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
+            {!collapsed && "Security & Privacy"}
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {securityItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      className="hover:bg-sidebar-accent/50 transition-colors"
+                      activeClassName="bg-primary/10 text-primary border-l-2 border-primary"
+                    >
+                      <item.icon className="w-4 h-4 mr-2 shrink-0" />
+                      {!collapsed && <span className="text-sm">{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
+            {!collapsed && "System"}
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {systemItems.map((item) => (
