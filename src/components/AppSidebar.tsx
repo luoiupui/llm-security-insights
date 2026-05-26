@@ -1,6 +1,7 @@
 import {
   LayoutDashboard, Network, Brain, FlaskConical, Database,
-  Shield, Settings, ChevronLeft, ChevronRight, Cpu, FileText, Github
+  Shield, Settings, ChevronLeft, ChevronRight, Cpu, FileText, Github,
+  Lock, ShieldAlert,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -16,6 +17,11 @@ const mainItems = [
   { title: "KG Construction", url: "/kg-construction", icon: Network },
   { title: "Attribution Reasoning", url: "/attribution", icon: Brain },
   { title: "Experiments", url: "/experiments", icon: FlaskConical },
+];
+
+const securityItems = [
+  { title: "AI Threat Model", url: "/threat-model", icon: ShieldAlert },
+  { title: "Privacy & FL Lab", url: "/privacy-fl-lab", icon: Lock },
 ];
 
 const systemItems = [
