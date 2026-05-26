@@ -1,0 +1,1 @@
+CREATE POLICY "monitoring_events_public_insert" ON public.monitoring_events FOR INSERT TO anon, authenticated WITH CHECK (category IN ('security','privacy','acceptance','experiment','pipeline'));

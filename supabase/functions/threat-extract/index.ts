@@ -5,6 +5,41 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Server-side prompt-firewall (mirror of src/lib/security/prompt-firewall.ts) ──
+// The UI heuristic is decorative; this is the actual trust boundary.
+const FIREWALL_RULES: Array<{ id: string; sev: "low" | "medium" | "high"; re: RegExp }> = [
+  { id: "ignore-previous", sev: "high", re: /ignore (?:the )?(?:above|previous|prior)\s+(?:instructions|prompt|rules)/i },
+  { id: "role-override", sev: "high", re: /^(?:system|assistant)\s*:/im },
+  { id: "tool-syntax-injection", sev: "high", re: /<\/?\s*(?:tool_call|function_call|tool_response)\s*>/i },
+  { id: "developer-mode", sev: "medium", re: /\b(?:developer mode|jailbreak|DAN|do anything now)\b/i },
+  { id: "exfil-keyword", sev: "medium", re: /\b(?:exfiltrate|send to|POST to)\b.{0,40}https?:\/\//i },
+  { id: "zero-width", sev: "medium", re: /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/ },
+  { id: "prompt-leak", sev: "medium", re: /\b(?:reveal|print|repeat) (?:your )?(?:system )?prompt\b/i },
+];
+function serverScanPrompt(text: string) {
+  const findings: Array<{ rule: string; sev: string; excerpt: string }> = [];
+  for (const r of FIREWALL_RULES) {
+    const m = text.match(r.re);
+    if (m) findings.push({ rule: r.id, sev: r.sev, excerpt: m[0].slice(0, 80) });
+  }
+  const score = Math.min(1, findings.reduce((s, f) => s + (f.sev === "high" ? 0.5 : f.sev === "medium" ? 0.25 : 0.1), 0));
+  const verdict: "clean" | "suspicious" | "blocked" = score >= 0.5 ? "blocked" : score >= 0.2 ? "suspicious" : "clean";
+  return { verdict, score, findings };
+}
+async function logSecurityEvent(payload: Record<string, unknown>) {
+  try {
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) return;
+    await fetch(`${url}/rest/v1/monitoring_events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}`, Prefer: "return=minimal" },
+      body: JSON.stringify(payload),
+    });
+  } catch { /* never block extraction on logging */ }
+}
+
+
 /**
  * ══════════════════════════════════════════════════════════════════
  * GRAPH-NATIVE LLM EXTRACTION ENGINE (Innovation: Ch. 3.3–3.4)
@@ -184,8 +219,27 @@ serve(async (req) => {
       });
     }
 
+    // ── Server-side prompt-firewall (cannot be bypassed by skipping the UI) ──
+    const firewall = serverScanPrompt(text);
+    if (firewall.verdict !== "clean") {
+      await logSecurityEvent({
+        event_type: "prompt_firewall_hit",
+        category: "security",
+        title: `threat-extract · firewall ${firewall.verdict} (score ${firewall.score.toFixed(2)})`,
+        detail: firewall.findings.map((f) => `${f.sev}:${f.rule}`).join(", "),
+        metadata: { domain, findings: firewall.findings, score: firewall.score, verdict: firewall.verdict },
+      });
+    }
+    if (firewall.verdict === "blocked") {
+      return new Response(JSON.stringify({ error: "Prompt blocked by server-side firewall", firewall }), {
+        status: 422,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
 
     const results: Record<string, unknown> = {
       source_type,
