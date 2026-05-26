@@ -2,6 +2,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Outlet } from "react-router-dom";
 import { DomainSwitch } from "@/components/DomainSwitch";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { useDomain } from "@/contexts/DomainContext";
 import { getOntology } from "@/lib/ontology";
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +23,12 @@ export function DashboardLayout() {
                 SIMULATION — synthetic data only
               </Badge>
             )}
-            <div className="ml-auto flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
-              <span className="text-xs text-muted-foreground font-mono">SYSTEM ACTIVE</span>
+            <div className="ml-auto flex items-center gap-3">
+              <LanguageSwitch />
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
+                <span className="text-xs text-muted-foreground font-mono">SYSTEM ACTIVE</span>
+              </div>
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6">
