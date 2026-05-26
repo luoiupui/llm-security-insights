@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DomainProvider } from "@/contexts/DomainContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import Overview from "./pages/Overview";
 import DataIngestion from "./pages/DataIngestion";
 import KGConstruction from "./pages/KGConstruction";
@@ -25,6 +26,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <DomainProvider>
+        <LanguageProvider>
         <Routes>
           <Route element={<DashboardLayout />}>
             <Route path="/" element={<Overview />} />
@@ -39,6 +41,7 @@ const App = () => (
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </LanguageProvider>
         </DomainProvider>
       </BrowserRouter>
     </TooltipProvider>
