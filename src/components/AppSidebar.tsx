@@ -81,10 +81,6 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
-            {!collapsed && "System"}
-          </SidebarGroupLabel>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
             {!collapsed && "Security & Privacy"}
           </SidebarGroupLabel>
           <SidebarGroupContent>
