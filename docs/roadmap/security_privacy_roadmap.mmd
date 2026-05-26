@@ -1,0 +1,45 @@
+flowchart LR
+  subgraph N["Now (Simulation, shipped)"]
+    direction TB
+    N1[DB hardening<br/>SECURITY INVOKER + EXECUTE revoke]
+    N2[AI Threat Model panel<br/>OWASP / ATLAS / NIST registry]
+    N3[Prompt-firewall heuristic<br/>scanPrompt 8 rules]
+    N4[Privacy & FL Lab<br/>De-id - DP - FedAvg - SecAgg - MIA]
+    N5[Domain switch + ontology guard<br/>CTI / Clinical]
+    N6[Audit via monitoring_events]
+  end
+
+  subgraph S["Short term (wire-in)"]
+    direction TB
+    S1[Firewall pre-check inside<br/>threat-extract edge fn]
+    S2[Tool-arg redaction + per-domain<br/>allow-list in threat-agent]
+    S3[Output-guard deny-log to<br/>monitoring_events category=security]
+    S4[Privacy events category=privacy<br/>surfaced in SelfMonitoringPanel]
+    S5[KG-Bench Privacy task family<br/>ε-vs-utility scored]
+  end
+
+  subgraph M["Mid term (real crypto + governance)"]
+    direction TB
+    M1[Server-side DP wrapper<br/>around threat-kg-query]
+    M2[Bonawitz secure aggregation<br/>replaces secure-agg.ts]
+    M3[LLM-judge firewall<br/>replaces heuristics]
+    M4[IRB-style approval workflow<br/>on persist + FL rounds]
+    M5[Signed audit log<br/>append-only, hash-chained]
+  end
+
+  subgraph L["Long term (real FL on clinical data)"]
+    direction TB
+    L1[Flower / NVFlare client per hospital<br/>swap runFedAvg]
+    L2[De-identified clinical corpus under DUA<br/>swap test-corpus.ts]
+    L3[Cross-silo FL on Gemini embeddings<br/>frozen backbone]
+    L4[Trusted Execution Environment<br/>for aggregator]
+    L5[Membership-inference monitoring<br/>continuous, gated by ε budget]
+  end
+
+  N1 --> S1 --> M1 --> L3
+  N2 --> S3 --> M4
+  N3 --> S2 --> M3
+  N4 --> S5 --> M2 --> L1
+  N5 --> M4 --> L2
+  N6 --> S4 --> M5 --> L4
+  L1 --> L5
