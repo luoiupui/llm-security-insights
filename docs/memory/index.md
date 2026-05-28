@@ -25,5 +25,6 @@ Strictly aligned with Chapters 2-5 of the user's research outline.
 - [Agent Harness](./architecture/agent-harness.md) — Dual pathways: deterministic pipeline (B, KG-Bench scored) + AI-SDK agent loop (A, experimental)
 - [Security Posture](./features/security-posture.md) — AI Threat Model page, posture registry, prompt-firewall guard
 - [Privacy & FL Lab](./features/privacy-fl-lab.md) — Simulation-only PPC/FL track: de-id, DP, FedAvg, secure agg, MIA
+- [Clinical Feature Ingest](./features/clinical-feature-ingest.md) — T2 heart-sound feature-vector contract (JSON Schema + FHIR mapping), spec only
 
 > Note: `mem://features/clinical-mode` is referenced in the live index but no body exists in the memory store yet; omitted here. Ask the agent to author it if needed.
