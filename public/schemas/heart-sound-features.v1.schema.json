@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secure-llm-mind.lovable.app/schemas/heart-sound-features.v1.schema.json",
+  "title": "Heart-Sound T2 Feature Record",
+  "description": "T2 recording-level heart-sound feature vector for Clinical KG ingest. v1.0. De-identified by construction; never accepts raw PHI.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "schema_version",
+    "subject_ref",
+    "signal_meta",
+    "features",
+    "provenance",
+    "text_view"
+  ],
+  "properties": {
+    "record_id": { "type": "string", "format": "uuid" },
+    "schema_version": { "const": "1.0" },
+    "subject_ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{6,64}$",
+      "description": "Opaque pseudonym. MUST NOT be MRN, SSN, email, or name."
+    },
+    "encounter_ref": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{4,64}$" },
+    "signal_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sampling_rate_hz", "duration_s", "channels", "device_model", "auscultation_site"],
+      "properties": {
+        "sampling_rate_hz": { "type": "number", "minimum": 500 },
+        "duration_s": { "type": "number", "exclusiveMinimum": 0 },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "device_model": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "auscultation_site": { "enum": ["aortic", "pulmonic", "tricuspid", "mitral", "erb"] }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "heart_rate_bpm", "hrv_sdnn_ms", "hrv_rmssd_ms",
+        "s1_s2_interval_ms", "s2_s1_interval_ms",
+        "systolic_murmur_energy", "diastolic_murmur_energy", "murmur_grade_estimate",
+        "spectral_centroid_hz", "spectral_rolloff_hz",
+        "mfcc_mean", "mfcc_std", "wavelet_band_energy",
+        "shannon_entropy", "snr_db", "quality_score"
+      ],
+      "properties": {
+        "heart_rate_bpm": { "type": "number", "minimum": 20, "maximum": 250, "$comment": "UCUM /min" },
+        "hrv_sdnn_ms": { "type": "number", "minimum": 0, "$comment": "UCUM ms" },
+        "hrv_rmssd_ms": { "type": "number", "minimum": 0, "$comment": "UCUM ms" },
+        "s1_s2_interval_ms": { "$ref": "#/$defs/meanStdMs" },
+        "s2_s1_interval_ms": { "$ref": "#/$defs/meanStdMs" },
+        "systolic_murmur_energy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "diastolic_murmur_energy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "murmur_grade_estimate": { "type": "number", "minimum": 0, "maximum": 6 },
+        "spectral_centroid_hz": { "type": "number", "minimum": 0 },
+        "spectral_rolloff_hz": { "type": "number", "minimum": 0 },
+        "mfcc_mean": { "type": "array", "items": { "type": "number" }, "minItems": 13, "maxItems": 13 },
+        "mfcc_std": { "type": "array", "items": { "type": "number", "minimum": 0 }, "minItems": 13, "maxItems": 13 },
+        "wavelet_band_energy": { "type": "array", "items": { "type": "number", "minimum": 0 }, "minItems": 6, "maxItems": 6 },
+        "shannon_entropy": { "type": "number", "minimum": 0 },
+        "snr_db": { "type": "number" },
+        "quality_score": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code_system", "code", "display", "confidence"],
+        "properties": {
+          "code_system": { "enum": ["SNOMED-CT", "LOINC", "ICD-10", "threatgraph-clinical-local/1.0"] },
+          "code": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "display": { "type": "string", "maxLength": 256 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "evidence_refs": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer_model_id", "producer_version", "preprocessing_chain", "created_at", "quality_flags"],
+      "properties": {
+        "producer_model_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "producer_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[A-Za-z0-9.-]+)?$" },
+        "preprocessing_chain": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "calibration_id": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "quality_flags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "text_view": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "description": "Auto-rendered natural-language summary. Consumed by the LLM extractor. MUST NOT contain raw PHI."
+    }
+  },
+  "$defs": {
+    "meanStdMs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mean", "std"],
+      "properties": {
+        "mean": { "type": "number", "minimum": 0, "$comment": "UCUM ms" },
+        "std": { "type": "number", "minimum": 0, "$comment": "UCUM ms" }
+      }
+    }
+  }
+}

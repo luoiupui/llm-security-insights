@@ -1,86 +1,43 @@
-# Implement Selective Redaction (Simulation)
+# Heart-Sound Feature-Vector Ingest Spec (Clinical KG)
 
-Build the §9 architecture from `general_whitepaper.md` as a runnable simulation. No real PHI. All resolvers stub-cached (no live HTTPS). Policies as version-controlled JSON. New "Redaction Lab" page. KG-Bench gains Category 8.
+Deliverable: one new spec document, no code. Scope: T2 recording-level features uploaded from an external system (DSP/ML pipeline outside this project).
 
-## Defaults chosen (since questions skipped)
-- **Scope**: Full simulation with stub adapters (~1300 LOC). Resolvers are real interfaces with cached JSON fixtures instead of live Wikidata/GeoNames — closer to white paper, no network flakiness.
-- **Policy storage**: Static JSON in `public/policies/` — version-controlled in GitHub, no DB migration, hot-reload by redeploy. Matches the user's earlier preference for GitHub-tracked memory/docs.
+## Files to create
 
-## Deliverables
+1. `public/reports/clinical-feature-ingest-spec.md` — the spec (primary deliverable, human-readable)
+2. `public/schemas/heart-sound-features.v1.schema.json` — JSON Schema for validators
+3. `public/schemas/examples/heart-sound-features.example.json` — one synthetic record
+4. `docs/memory/features/clinical-feature-ingest.md` + index entry in `docs/memory/index.md`
 
-### 1. Datasets (in-repo, synthetic)
-- `src/lib/redaction/corpus/clinical-phi.json` — 10 docs with Safe-Harbor PHI (names, MRNs, dates, zips), EN/JA/ZH
-- `src/lib/redaction/corpus/cti-tlp.json` — 10 CTI snippets with TLP:RED/AMBER/GREEN markings
-- `src/lib/redaction/corpus/archive.json` — 10 historical excerpts with synthetic living-relative / cultural / sealed-until overlays
-- `src/lib/redaction/corpus/hard-negatives.json` — 5 docs that look sensitive but aren't (declassified CVEs, >100y-deceased figures)
-- Each doc has a gold sidecar: `[{start, end, axis, rule_id, action}]`
+No edits to runtime code, edge functions, ontology, or pipeline. The spec describes the contract; implementation is a follow-up.
 
-### 2. Knowledge sources (cached JSON fixtures)
-- `public/policies/clinical.json` — HIPAA Safe-Harbor 18 identifiers as policy rules
-- `public/policies/cti.json` — TLP/FIRST classification rules
-- `public/policies/archive.json` — death-date thresholds, cultural-sensitivity gazetteer stub
-- `src/lib/redaction/resolvers/fixtures/wikidata.json` — pre-canned entity lookups (date_of_death, occupation)
-- `src/lib/redaction/resolvers/fixtures/geonames.json` — pre-canned place lookups
-- `src/lib/redaction/resolvers/fixtures/lcsh.json` — subject-heading stub
+## Spec contents (`clinical-feature-ingest-spec.md`)
 
-### 3. Software modules
+1. **Purpose & scope** — why T2 features are valid intermediates for KG (de-identified, compact, reusable for classification + symbolic reasoning); explicit non-goals (no raw PCG handling, no inline DSP).
+2. **Position in pipeline** — sibling of `threat-preprocess` on the Clinical branch; emits the same normalized "document" shape that `threat-extract` consumes, with a machine-readable `features` block and an auto-rendered `text_view` the LLM reads. Respects existing stage contracts from the `pipeline-stage-contracts` skill.
+3. **Record schema (T2)** — one JSON object per recording:
+   - `record_id`, `schema_version: "1.0"`
+   - `subject_ref` (opaque pseudonym, never raw MRN), `encounter_ref`
+   - `signal_meta`: `sampling_rate_hz`, `duration_s`, `channels`, `device_model`, `auscultation_site` (aortic/pulmonic/tricuspid/mitral/erb)
+   - `features` (T2 aggregates): heart_rate_bpm, hrv_sdnn_ms, hrv_rmssd_ms, s1_s2_interval_ms (mean/std), s2_s1_interval_ms (mean/std), systolic_murmur_energy, diastolic_murmur_energy, murmur_grade_estimate (0–6), spectral_centroid_hz, spectral_rolloff_hz, mfcc_mean[13], mfcc_std[13], wavelet_band_energy[6], shannon_entropy, snr_db, quality_score (0–1)
+   - `findings` (optional T3 passthrough): array of `{code_system, code, display, confidence, evidence_refs[]}`
+   - `provenance`: `producer_model_id`, `producer_version`, `preprocessing_chain[]`, `calibration_id`, `created_at` (ISO-8601), `quality_flags[]`
+   - `text_view` (string, auto-derived) — natural-language rendering used by the LLM extractor.
+4. **Units & coding** — UCUM for all `valueQuantity`; LOINC for measurements (e.g. `8867-4` HR), SNOMED-CT for findings (e.g. `88610006` Heart murmur); project-local codes for engineered features without a standard, registered in `src/lib/ontology/clinical.ts` as a follow-up.
+5. **FHIR R5 mapping** — record → `DiagnosticReport` with one `Observation` per top-level feature; embeddings/arrays via `Observation.valueSampledData`; `derivedFrom` references the upstream `Media` resource (kept external).
+6. **File formats** — JSON for single records, NDJSON for batches; gzip allowed; max 5 MB per record. Parquet/HDF5 explicitly out of scope for v1.
+7. **Validation rules** — required-field list, range checks (HR 20–250, quality_score 0–1, sampling_rate ≥ 500 Hz), UCUM conformance, monotonic timestamps, presence of all provenance fields. Records failing validation are rejected at ingest with a structured error.
+8. **PHI guard** — `subject_ref` MUST be opaque; spec forbids name/DOB/MRN/free-text patient narrative. Selective-redaction §9 is wired but expected to be a no-op for T2; remains active for any free-text `interpretation` field.
+9. **Mapping to KG triples** — worked example: `(Recording r1) -[has_finding]-> (SystolicMurmur f1)`; `(f1) -[graded]-> (Grade3)`; `(f1) -[suggests, confidence=0.78]-> (AorticStenosis)`; `(Patient p1) -[underwent]-> (r1)`. Shows how validators and credibility scoring (existing formula) consume `quality_score` and `confidence`.
+10. **KG-Bench Clinical hooks** — gold-case shape for feature→finding→condition triples; notes that adding cases requires bumping the KG-Bench gold version per the cardinal rule in `pipeline-stage-contracts`.
+11. **Open extension points (not v1)** — T1 frame-level (Parquet), T3 embeddings sidecar, inline DSP, streaming ingest.
 
-| Path | Purpose | LOC |
-|---|---|---|
-| `src/lib/redaction/policy.ts` | Loader + Zod schema validator | 120 |
-| `src/lib/redaction/resolvers/{wikidata,geonames,lcsh,local}.ts` | 4 adapters, common interface | 300 |
-| `src/lib/redaction/cache.ts` | LRU cache wrapper | 80 |
-| `src/lib/redaction/guard.ts` | Symbolic non-downgrade guard | 60 |
-| `src/lib/redaction/mask.ts` | Typed placeholders (`[PERSON-7]`, `[DATE-REDACTED]`) | 100 |
-| `src/lib/redaction/pipeline.ts` | Orchestrator: extract→resolve→adjudicate→guard→mask | 150 |
-| `supabase/functions/redaction-adjudicate/index.ts` | LLM policy adjudicator via Lovable AI Gateway (`gemini-3-flash-preview`) | 150 |
-| `src/lib/kg-bench/scorers.ts` (extend) + `corpus.ts` (extend) | KG-Bench Category 8: `0.5·F1 + 0.3·utility − 0.2·over_redaction` | 150 |
-| `src/pages/RedactionLab.tsx` | Diff view (original ↔ masked), per-axis legend, policy trace, simulation banner | 250 |
-| `src/components/AppSidebar.tsx` (extend) + `src/App.tsx` (route) | Nav entry | 20 |
-| `src/lib/self-monitoring.ts` (extend) | `category="redaction"` events | 20 |
-| `supabase/functions/threat-agent/index.ts` (extend) | New tool `propose_policy_entry` (Pathway A) | 50 |
-| `src/contexts/DomainContext.tsx` (extend) | Add `"archive"` domain | 30 |
+## Technical notes
 
-**Total: ~1480 LOC.**
+- Spec only — no edge function, no UI, no schema migration in this plan.
+- JSON Schema uses Draft 2020-12 with `$id` pointing at the public path so external producers can validate offline.
+- Memory entry summarises the contract so future build-mode work picks it up automatically.
 
-### 4. UI flow (Redaction Lab page)
-```text
-┌──────────────────────────────────────────────────┐
-│ [Domain: CTI ▾]  [Doc: select ▾]  [Run ▶]       │
-├─────────────────────┬────────────────────────────┤
-│  Original           │  Masked (one-way)          │
-│  John Smith, MRN    │  [PERSON-1], [MRN-RED],    │
-│  12345, born 1952…  │  born [DATE-REDACTED]…     │
-├─────────────────────┴────────────────────────────┤
-│ Axis legend: ■ PII  ■ Cultural  ■ Legal  ■ Sec  │
-│ Policy trace: rule HIPAA-§164.514(b)(2)(i)(A)    │
-│ Score: F1 0.92 · utility 0.81 · over-red 0.04    │
-│ ⚠ Simulation only — no real PHI processed        │
-└──────────────────────────────────────────────────┘
-```
+## Out of scope
 
-### 5. Evaluation
-- KG-Bench Cat 8 added as 8th tab category in existing `KGBenchPanel`
-- Skip-counter for utility tasks where gold answer falls inside a masked span
-- Over-redaction baseline: run on `hard-negatives.json`, expect score → 0
-
-### 6. Governance / safety
-- Simulation banner on `RedactionLab` (matches `PrivacyFLLab` pattern)
-- Symbolic guard rejects any adjudicator output that *downgrades* a rule-based mask
-- All runs emit `monitoring_events` row with `category="redaction"`
-
-## Documentation updates
-- Append "Implementation Status" subsection to `public/reports/general_whitepaper.md` §9 (list shipped vs. forward-port)
-- New memory file `mem://features/selective-redaction` + add to `mem://index.md`
-- Mirror to `docs/memory/features/selective-redaction.md` for GitHub
-
-## Out of scope (forward port)
-- Live Wikidata/GeoNames HTTPS calls (stubbed)
-- Reversible masking (one-way only, per earlier decision)
-- Editable policy DB + approval workflow (static JSON for now)
-- Real archive corpus under DUA
-- MIA probe on redacted output
-
-## Risks
-- LLM adjudicator may over-redact on archive docs with sparse context → mitigated by symbolic guard *only allowing upgrades*, never blind LLM masking
-- Stub resolver fixtures will diverge from real Wikidata over time → fixtures are explicitly dated and marked as test data
+- T1/T3 tiers, inline feature computation, raw audio handling, ingest endpoint, UI uploader, ontology extensions, KG-Bench gold-case authoring.
