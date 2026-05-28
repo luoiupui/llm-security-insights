@@ -1,0 +1,61 @@
+{
+  "record_id": "f4b1c2d8-91c2-4a3e-9b77-2e0c3a91ab10",
+  "schema_version": "1.0",
+  "subject_ref": "subj_4f9a8c",
+  "encounter_ref": "enc_2024_0912_intmed",
+  "signal_meta": {
+    "sampling_rate_hz": 4000,
+    "duration_s": 30.0,
+    "channels": 1,
+    "device_model": "Eko CORE 1",
+    "auscultation_site": "aortic"
+  },
+  "features": {
+    "heart_rate_bpm": 78.2,
+    "hrv_sdnn_ms": 42.1,
+    "hrv_rmssd_ms": 28.5,
+    "s1_s2_interval_ms": { "mean": 312.4, "std": 18.7 },
+    "s2_s1_interval_ms": { "mean": 458.9, "std": 22.3 },
+    "systolic_murmur_energy": 0.71,
+    "diastolic_murmur_energy": 0.08,
+    "murmur_grade_estimate": 3,
+    "spectral_centroid_hz": 168.4,
+    "spectral_rolloff_hz": 412.7,
+    "mfcc_mean": [-12.4, 3.1, -1.8, 2.4, -0.9, 1.1, -0.4, 0.7, -0.3, 0.2, -0.1, 0.05, -0.02],
+    "mfcc_std":  [  2.1, 1.4,  1.1, 0.9,  0.8, 0.7,  0.6, 0.5,  0.4, 0.4,  0.3, 0.3,   0.25],
+    "wavelet_band_energy": [0.12, 0.31, 0.28, 0.18, 0.08, 0.03],
+    "shannon_entropy": 4.21,
+    "snr_db": 18.6,
+    "quality_score": 0.84
+  },
+  "findings": [
+    {
+      "code_system": "SNOMED-CT",
+      "code": "88610006",
+      "display": "Heart murmur",
+      "confidence": 0.92,
+      "evidence_refs": ["features.systolic_murmur_energy", "features.murmur_grade_estimate"]
+    },
+    {
+      "code_system": "SNOMED-CT",
+      "code": "60573004",
+      "display": "Aortic valve stenosis",
+      "confidence": 0.78,
+      "evidence_refs": ["features.spectral_centroid_hz", "signal_meta.auscultation_site"]
+    }
+  ],
+  "provenance": {
+    "producer_model_id": "pcg-feat-extractor",
+    "producer_version": "2.3.0",
+    "preprocessing_chain": [
+      "bandpass:25-400Hz",
+      "schmidt-segmentation:v2",
+      "mfcc:13",
+      "wavelet:db6:6bands"
+    ],
+    "calibration_id": "cal_2024Q3_eko_core1",
+    "created_at": "2024-09-12T14:22:08Z",
+    "quality_flags": ["motion_artifact_low"]
+  },
+  "text_view": "Cardiology PCG recording at the aortic site, 30 s @ 4 kHz. Heart rate 78 bpm; HRV SDNN 42 ms. Strong systolic murmur (energy 0.71, Levine grade 3) with elevated spectral centroid (168 Hz). Diastolic component minimal. Quality 0.84 (low motion artifact). Auto-derived findings: heart murmur (SNOMED 88610006, conf 0.92); suggestive of aortic valve stenosis (SNOMED 60573004, conf 0.78)."
+}
