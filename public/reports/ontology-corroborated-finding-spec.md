@@ -1,7 +1,15 @@
 # Ontology Extension: `CorroboratedFinding` Node + Fusion Edges
 
-**Status:** Specification only. `src/lib/ontology/cti.ts` is **not** edited in this
-revision. This document is the contract a follow-up build task will implement.
+**Status:** Phase 3 SHIPPED (2026-06-13). Implementation lives in
+`src/lib/ontology/corroborated-finding.ts` (helpers, fusion math,
+STIX 2.1 export) and `src/lib/ontology/cti.ts` (entity + relation types).
+Persistence layer: `public.kg_corroborated_findings` table (public-read RLS,
+service-role write, validation trigger). The `kg_entities.source_modality`
+column is added with a backfill default of `external_cti` per §3.1. KG-Bench
+gold corpus bumped to **GOLD_VERSION v2** with the new `fusion_corroboration`
+category (2 CTI + 1 Clinical cases). The actual fusion matcher (the job that
+emits `corroborates` edges) is intentionally still out of scope — bench
+baseline for the new category is therefore 0 by design.
 
 Companion to `cti-multimodal-fusion.md` (concept) and
 `conflict-rules-multimodal-extension.md` (rules that consume these types).

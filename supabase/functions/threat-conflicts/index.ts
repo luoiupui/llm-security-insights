@@ -340,9 +340,13 @@ function checkGraphConnectivity(nodes: Entity[], edges: Relation[]): ConflictRes
 }
 
 function checkOntologicalCompliance(nodes: Entity[], edges: Relation[]): ConflictResult {
-  const validSTIXSDO = new Set(["threat_actor", "malware", "vulnerability", "ttp", "infrastructure", "software", "campaign", "indicator", "identity", "attack-pattern", "tool", "observed-data"]);
+  const validSTIXSDO = new Set(["threat_actor", "malware", "vulnerability", "ttp", "infrastructure", "software", "campaign", "indicator", "identity", "attack-pattern", "tool", "observed-data",
+    // Phase 3 — multi-modal fusion node types
+    "flow_pattern", "corroborated_finding"]);
   const validSTIXSRO = new Set(["uses", "targets", "attributed-to", "attributed_to", "communicates-with", "communicates_with", "exploits", "delivers", "drops", "indicates", "mitigates", "derived-from", "related-to", "hosts", "implements", "employs",
-    "enables", "leads_to", "triggers", "precedes"]);  // include causal types
+    "enables", "leads_to", "triggers", "precedes",
+    // Phase 3 — fusion edges (spec §2)
+    "corroborates", "contradicts", "matches_ioc"]);  // include causal + fusion types
 
   const invalidNodes = nodes.filter(n => !validSTIXSDO.has(n.type) && !validSTIXSDO.has(n.stix_type || ""));
   const invalidEdges = edges.filter(e => !validSTIXSRO.has(e.relation));

@@ -91,6 +91,66 @@ export type Database = {
           },
         ]
       }
+      kg_corroborated_findings: {
+        Row: {
+          conf_behavioral: number
+          conf_narrative: number
+          created_at: string
+          evidence_window_end: string | null
+          evidence_window_start: string | null
+          flow_ref: string
+          fusion_method: string
+          id: string
+          provenance: Json
+          report_id: string | null
+          ttp_name: string
+          ttp_ref: string | null
+        }
+        Insert: {
+          conf_behavioral: number
+          conf_narrative: number
+          created_at?: string
+          evidence_window_end?: string | null
+          evidence_window_start?: string | null
+          flow_ref: string
+          fusion_method?: string
+          id?: string
+          provenance?: Json
+          report_id?: string | null
+          ttp_name: string
+          ttp_ref?: string | null
+        }
+        Update: {
+          conf_behavioral?: number
+          conf_narrative?: number
+          created_at?: string
+          evidence_window_end?: string | null
+          evidence_window_start?: string | null
+          flow_ref?: string
+          fusion_method?: string
+          id?: string
+          provenance?: Json
+          report_id?: string | null
+          ttp_name?: string
+          ttp_ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kg_corroborated_findings_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "threat_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kg_corroborated_findings_ttp_ref_fkey"
+            columns: ["ttp_ref"]
+            isOneToOne: false
+            referencedRelation: "kg_entities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kg_entities: {
         Row: {
           canonical_name: string
@@ -102,6 +162,7 @@ export type Database = {
           mitre_id: string | null
           name: string
           report_id: string | null
+          source_modality: string
           stix_type: string | null
         }
         Insert: {
@@ -114,6 +175,7 @@ export type Database = {
           mitre_id?: string | null
           name: string
           report_id?: string | null
+          source_modality?: string
           stix_type?: string | null
         }
         Update: {
@@ -126,6 +188,7 @@ export type Database = {
           mitre_id?: string | null
           name?: string
           report_id?: string | null
+          source_modality?: string
           stix_type?: string | null
         }
         Relationships: [
