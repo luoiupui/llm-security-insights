@@ -201,6 +201,72 @@ export const clinicalCases: BenchCase[] = [
   },
 ];
 
+/* ── Fusion-corroboration corpus (Phase 3, GOLD_VERSION v2) ──
+ * Cases describe a narrative TTP claim alongside an internal flow signature
+ * keyed by a stable `flow_ref` (matches `cti-flow-feature-ingest-spec.md`).
+ * The scorer rewards `corroborates` triples whose subject matches the gold
+ * TTP and whose object equals the `flow_ref`. Until the fusion job lands,
+ * these cases anchor the baseline at 0 — by design.
+ */
+const fusionCorroborationCases: BenchCase[] = [
+  {
+    id: "cti-fc-1",
+    category: "fusion_corroboration",
+    name: "APT-29 beaconing ↔ flow#a42b",
+    text:
+      "Vendor report: APT-29 used HTTPS beaconing (T1071.001) against the corporate enclave. " +
+      "Internal SOC observed flow flow#a42b: 10.0.7.21 → 203.0.113.4:443 with 60s inter-arrival, " +
+      "1.8s jitter, payload entropy 4.2 bits/byte (anomaly score 0.74).",
+    goldEntities: ["APT-29", "T1071.001", "flow#a42b"],
+    goldTriples: [
+      { s: "APT-29", p: "uses", o: "T1071.001" },
+    ],
+    goldCorroborations: [
+      { ttp: "T1071.001", flow_ref: "flow#a42b", expected_conf_narrative_min: 0.7 },
+    ],
+  },
+  {
+    id: "cti-fc-2",
+    category: "fusion_corroboration",
+    name: "Cobalt Strike C2 ↔ flow#9e07",
+    text:
+      "Mandiant noted Cobalt Strike (T1059.001) command-and-control activity attributed to FIN7. " +
+      "Internal flow flow#9e07 from 10.0.4.12 to 198.51.100.22:8443 shows malleable-profile JA3 fingerprint, " +
+      "30-second beacon cadence, 5% jitter.",
+    goldEntities: ["FIN7", "Cobalt Strike", "T1059.001", "flow#9e07"],
+    goldTriples: [
+      { s: "FIN7", p: "uses", o: "Cobalt Strike" },
+    ],
+    goldCorroborations: [
+      { ttp: "T1059.001", flow_ref: "flow#9e07", expected_conf_narrative_min: 0.7 },
+    ],
+  },
+];
+
+const clinicalFusionCases: BenchCase[] = [
+  {
+    id: "cl-fc-1",
+    category: "fusion_corroboration",
+    name: "Sepsis bundle adherence ↔ vitals#v17",
+    language: "en",
+    text:
+      "Discharge summary asserts SEP-1 bundle compliance for septic shock (R65.21). " +
+      "Internal vitals trace vitals#v17 records MAP < 65 for 42 min before antibiotic administration, " +
+      "lactate 4.8 mmol/L drawn at t+18m.",
+    goldEntities: ["septic shock", "SEP-1", "vitals#v17"],
+    goldTriples: [
+      { s: "patient", p: "diagnosed_with", o: "septic shock" },
+    ],
+    goldCorroborations: [
+      { ttp: "SEP-1", flow_ref: "vitals#v17", expected_conf_narrative_min: 0.6 },
+    ],
+  },
+];
+
+// Append fusion cases to each domain (kept as separate arrays for readability)
+ctiCases.push(...fusionCorroborationCases);
+clinicalCases.push(...clinicalFusionCases);
+
 export function getCorpus(domain: Domain): BenchCase[] {
   return domain === "clinical" ? clinicalCases : ctiCases;
 }
@@ -208,6 +274,7 @@ export function getCorpus(domain: Domain): BenchCase[] {
 export const CATEGORIES: TaskCategory[] = [
   "fact_extraction", "ontology_conformance", "serialization",
   "qa", "repair", "hallucination", "multilingual",
+  "fusion_corroboration",
 ];
 
 export const CATEGORY_LABEL: Record<TaskCategory, string> = {
@@ -218,4 +285,5 @@ export const CATEGORY_LABEL: Record<TaskCategory, string> = {
   repair: "Schema / Repair",
   hallucination: "Hallucination Ctrl",
   multilingual: "Multilingual",
+  fusion_corroboration: "Fusion Corroboration",
 };
