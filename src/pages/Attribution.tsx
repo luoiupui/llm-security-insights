@@ -230,14 +230,52 @@ export default function Attribution() {
                         <p className="text-sm font-medium">{rule.rule}</p>
                         <p className="text-xs text-muted-foreground">{rule.detail}</p>
                         {rule.affected_items && rule.affected_items.length > 0 && (
-                          <div className="flex gap-1 mt-1">
+                          <div className="flex gap-1 mt-1 flex-wrap">
                             {rule.affected_items.map((item, j) => (
                               <Badge key={j} variant="outline" className="text-[9px]">{item}</Badge>
                             ))}
                           </div>
                         )}
+                        {rule.dual_confidence && rule.dual_confidence.length > 0 && (
+                          <div className="mt-2 space-y-1.5">
+                            {rule.dual_confidence.slice(0, 5).map((dc, j) => (
+                              <div key={j} className="text-[10px] font-mono">
+                                <div className="flex items-center justify-between gap-2 mb-0.5">
+                                  <span className="text-muted-foreground truncate max-w-[60%]">{dc.item}</span>
+                                  {dc.freshness != null && (
+                                    <span className="text-warning">freshness {dc.freshness.toFixed(2)}</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-12 text-muted-foreground shrink-0">ext</span>
+                                  <div className="flex-1 h-1.5 bg-secondary/40 rounded overflow-hidden">
+                                    <div className="h-full bg-primary" style={{ width: `${Math.round(dc.external * 100)}%` }} />
+                                  </div>
+                                  <span className="w-8 text-right">{dc.external.toFixed(2)}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-12 text-muted-foreground shrink-0">int</span>
+                                  <div className="flex-1 h-1.5 bg-secondary/40 rounded overflow-hidden">
+                                    <div className="h-full bg-success" style={{ width: `${Math.round(dc.internal * 100)}%` }} />
+                                  </div>
+                                  <span className="w-8 text-right">{dc.internal.toFixed(2)}</span>
+                                </div>
+                                {dc.fused_before != null && dc.fused_after != null && (
+                                  <div className="text-muted-foreground mt-0.5">
+                                    fused: {dc.fused_before.toFixed(2)} → <span className="text-foreground">{dc.fused_after.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <Badge variant="secondary" className="text-[10px] font-mono">{rule.type}</Badge>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <Badge variant="secondary" className="text-[10px] font-mono">{rule.type}</Badge>
+                        {rule.rule_id && (
+                          <Badge variant="outline" className="text-[9px] font-mono">{rule.rule_id}</Badge>
+                        )}
+                      </div>
                     </motion.div>
                   );
                 })}
