@@ -121,6 +121,17 @@ export interface ConflictResult {
   detail: string;
   type: string;
   affected_items?: string[];
+  // Multi-modal fusion rule extensions (R11–R13). Optional, additive.
+  rule_id?: "R11" | "R12" | "R13";
+  flag?: "requires_internal_corroboration" | "stale_match" | "modality_conflict";
+  dual_confidence?: Array<{
+    item: string;
+    external: number;
+    internal: number;
+    fused_before?: number;
+    fused_after?: number;
+    freshness?: number;
+  }>;
 }
 
 export interface ConflictAnalysis {
