@@ -1,6 +1,6 @@
 const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
         HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
-        Header, Footer, PageNumber } = require("docx");
+        Header, Footer, PageNumber, PageBreak } = require("docx");
 const fs = require("fs");
 
 const cellBorder = { style: BorderStyle.SINGLE, size: 1, color: "999999" };
