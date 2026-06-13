@@ -158,7 +158,7 @@ export function exportBenchMarkdown(run: BenchRun): string {
   const lines: string[] = [];
   lines.push(`# KG-Bench Report (${run.domain.toUpperCase()})`);
   lines.push(``);
-  lines.push(`Generated: ${run.finishedAt}  ·  Duration: ${(run.totalMs / 1000).toFixed(1)}s`);
+  lines.push(`Generated: ${run.finishedAt}  ·  Duration: ${(run.totalMs / 1000).toFixed(1)}s  ·  Gold version: ${GOLD_VERSION}`);
   lines.push(``);
   lines.push(`**Bench-Score (macro-F1 across categories): ${(run.benchScore * 100).toFixed(1)}**`);
   lines.push(``);
