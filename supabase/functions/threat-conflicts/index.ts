@@ -413,3 +413,136 @@ async function resolveConflictsWithLLM(apiKey: string, conflicts: ConflictResult
     return "LLM resolution failed";
   }
 }
+
+// ════════════════════════════════════════════════════════════════════
+// MULTI-MODAL FUSION RULES R11–R13 (Phase 2)
+// Inline Deno copy of src/lib/conflicts/multimodal-rules.ts. Keep in sync.
+// Spec: public/reports/conflict-rules-multimodal-extension.md
+// ════════════════════════════════════════════════════════════════════
+
+const HALF_LIFE_DAYS: Record<string, number> = { ip: 30, domain: 30, hash: 180, ttp: 365 };
+const HARD_CUTOFF_DAYS: Record<string, number> = { ip: 180, domain: 180, hash: 730 };
+
+function clamp01(x: number): number {
+  if (typeof x !== "number" || !Number.isFinite(x)) return 0;
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+function freshness(ageDays: number, halfLife: number): number {
+  if (!Number.isFinite(ageDays) || ageDays < 0 || halfLife <= 0) return 0;
+  return Math.max(0.05, Math.min(1, Math.pow(0.5, ageDays / halfLife)));
+}
+function ageDaysFrom(iso: string | undefined, now = new Date()): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : Math.max(0, (now.getTime() - t) / 86_400_000);
+}
+function modalityOf(x: any): string {
+  if (x?.source_modality) return x.source_modality;
+  const t = x?.type;
+  if (t === "indicator" || t === "ioc") return "external_cti";
+  if (t === "flow_pattern" || t === "internal_asset") return "internal_flow";
+  return "unknown";
+}
+
+function applyR11(entities: any[], relations: any[]): ConflictResult {
+  const threshold = 0.7, clamp = 0.6;
+  const corroborated = new Set<string>();
+  for (const r of relations) {
+    if (r.relation === "corroborates" || modalityOf(r) === "internal_flow") {
+      corroborated.add(r.source); corroborated.add(r.target);
+    }
+  }
+  const flagged: any[] = [], dual: any[] = [];
+  for (const e of entities) {
+    if (modalityOf(e) !== "external_cti") continue;
+    if (e.confidence < threshold) continue;
+    if (corroborated.has(e.name)) continue;
+    flagged.push(e);
+    dual.push({
+      item: e.name,
+      external: e.conf_narrative ?? e.confidence,
+      internal: e.conf_behavioral ?? 0,
+      fused_before: e.confidence,
+      fused_after: Math.min(e.confidence, clamp),
+    });
+  }
+  if (flagged.length === 0) {
+    return {
+      rule: "Unverified External (R11)", status: "pass", type: "multimodal_fusion",
+      detail: entities.some(e => modalityOf(e) === "external_cti")
+        ? "All external CTI entities have internal corroboration"
+        : "No external CTI entities present (rule no-op)",
+    } as any;
+  }
+  return {
+    rule: "Unverified External (R11)", status: "warn", type: "multimodal_fusion",
+    detail: `${flagged.length} external-only entity(ies) above threshold; clamping fused_conf ≤ ${clamp}`,
+    affected_items: flagged.map(e => e.name),
+    rule_id: "R11", flag: "requires_internal_corroboration", dual_confidence: dual,
+  } as any;
+}
+
+function applyR12(relations: any[]): ConflictResult {
+  const now = new Date(), minDecay = 0.5;
+  const items: string[] = [], dual: any[] = [];
+  let stalest = 1;
+  for (const r of relations) {
+    if (r.relation !== "matches_ioc") continue;
+    const age = ageDaysFrom(r.observed_at, now);
+    if (age == null) continue;
+    const indType = String(r.indicator_type ?? "ip").toLowerCase();
+    const halfLife = HALF_LIFE_DAYS[indType] ?? 30;
+    const cutoff = HARD_CUTOFF_DAYS[indType];
+    const fr = clamp01(freshness(age, halfLife));
+    if (cutoff != null && age > cutoff) {
+      items.push(`${r.source}→${r.target} (age ${age.toFixed(0)}d > cutoff ${cutoff}d)`);
+      dual.push({ item: `${r.source}→${r.target}`, external: r.confidence, internal: 0, fused_before: r.confidence, fused_after: 0, freshness: 0 });
+      stalest = 0; continue;
+    }
+    if (fr < minDecay) {
+      items.push(`${r.source}→${r.target} (freshness ${fr.toFixed(3)})`);
+      dual.push({ item: `${r.source}→${r.target}`, external: r.confidence, internal: 0, fused_before: r.confidence, fused_after: clamp01(r.confidence * fr), freshness: fr });
+      stalest = Math.min(stalest, fr);
+    }
+  }
+  if (items.length === 0) {
+    return {
+      rule: "Stale IoC Match (R12)", status: "pass", type: "multimodal_fusion",
+      detail: relations.some(r => r.relation === "matches_ioc")
+        ? "All IoC matches within freshness window"
+        : "No IoC matches present (rule no-op)",
+    } as any;
+  }
+  return {
+    rule: "Stale IoC Match (R12)", status: "warn", type: "multimodal_fusion",
+    detail: `${items.length} stale IoC match(es); minimum freshness ${stalest.toFixed(3)}`,
+    affected_items: items, rule_id: "R12", flag: "stale_match", dual_confidence: dual,
+  } as any;
+}
+
+function applyR13(entities: any[]): ConflictResult {
+  const hi = 0.8, lo = 0.3;
+  const conflicts: any[] = [], dual: any[] = [];
+  for (const e of entities) {
+    const n = e.conf_narrative, b = e.conf_behavioral;
+    if (n == null || b == null) continue;
+    const disagree = (n >= hi && b <= lo) || (b >= hi && n <= lo);
+    if (!disagree) continue;
+    conflicts.push(e);
+    dual.push({ item: e.name, external: n, internal: b, fused_before: e.confidence, fused_after: 0 });
+  }
+  if (conflicts.length === 0) {
+    return {
+      rule: "Cross-Modal Disagreement (R13)", status: "pass", type: "multimodal_fusion",
+      detail: entities.some(e => e.conf_narrative != null && e.conf_behavioral != null)
+        ? "Narrative and behavioral confidences agree"
+        : "No dual-modality evidence present (rule no-op)",
+    } as any;
+  }
+  return {
+    rule: "Cross-Modal Disagreement (R13)", status: "fail", type: "multimodal_fusion",
+    detail: `${conflicts.length} entity(ies) with conflicting modality evidence; queued for LLM resolver`,
+    affected_items: conflicts.map(e => e.name),
+    rule_id: "R13", flag: "modality_conflict", dual_confidence: dual,
+  } as any;
+}
