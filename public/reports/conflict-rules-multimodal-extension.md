@@ -1,7 +1,13 @@
 # Conflict-Rule Extension: Multi-Modal Fusion Rules R11–R13
 
-**Status:** Specification only. No edits to `supabase/functions/threat-conflicts/index.ts`
-in this revision. Wiring notes in §4 describe the exact follow-up edits.
+**Status:** Phase 2 SHIPPED (2026-06-13). Rules R11/R12/R13 are implemented in
+`src/lib/conflicts/multimodal-rules.ts` (pure TS, 12 unit tests) and inlined
+into `supabase/functions/threat-conflicts/index.ts`. The Conflict Detection
+tab on `/attribution` renders dual-confidence bars (external vs. internal,
+freshness factor, fused before→after) whenever a multi-modal rule fires.
+KG-Bench gold-version bump intentionally deferred to Phase 3 because the
+rules are strictly additive and `pass` as no-ops on existing single-modality
+pipeline inputs.
 
 Extends the 10-rule symbolic conflict engine described in
 `mem://architecture/threat-reasoning` with three rules that govern fusion of
