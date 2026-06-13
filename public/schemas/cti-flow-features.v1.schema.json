@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secure-llm-mind.lovable.app/schemas/cti-flow-features.v1.schema.json",
+  "title": "CTI T2 Flow-Feature Record",
+  "description": "T2 bidirectional-flow feature record for CTI internal-telemetry KG ingest. v1.0. De-identified by construction via opaque asset_ref and CDN/cloud allow-listed peer_ref.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "schema_version",
+    "asset_ref",
+    "peer_ref",
+    "flow_meta",
+    "features",
+    "provenance",
+    "text_view"
+  ],
+  "properties": {
+    "record_id": { "type": "string", "format": "uuid" },
+    "schema_version": { "const": "1.0" },
+    "asset_ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{6,64}$",
+      "description": "Opaque pseudonym for the internal host. MUST NOT be raw IP, MAC, or AD name."
+    },
+    "peer_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "Opaque pseudonym if peer is allow-listed; otherwise raw external IP/hostname."
+    },
+    "flow_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_ts", "end_ts", "duration_s", "protocol", "src_port", "dst_port", "direction", "sensor_id"],
+      "properties": {
+        "start_ts": { "type": "string", "format": "date-time" },
+        "end_ts": { "type": "string", "format": "date-time" },
+        "duration_s": { "type": "number", "minimum": 0 },
+        "protocol": { "enum": ["tcp", "udp", "icmp", "other"] },
+        "src_port": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "dst_port": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "direction": { "enum": ["ingress", "egress", "lateral"] },
+        "vlan": { "type": ["integer", "null"], "minimum": 0, "maximum": 4094 },
+        "sensor_id": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fwd_packets", "bwd_packets", "total_bytes_fwd", "total_bytes_bwd",
+        "pkt_len_mean", "pkt_len_std", "pkt_len_max", "pkt_len_min",
+        "fwd_pkt_len_mean", "fwd_pkt_len_std", "bwd_pkt_len_mean", "bwd_pkt_len_std",
+        "iat_mean", "iat_std", "iat_min", "iat_max",
+        "fwd_iat_mean", "fwd_iat_std", "bwd_iat_mean", "bwd_iat_std",
+        "flow_bytes_per_s", "flow_packets_per_s",
+        "syn_count", "ack_count", "fin_count", "rst_count", "psh_count", "urg_count",
+        "init_win_bytes_fwd", "init_win_bytes_bwd",
+        "active_mean", "active_std", "idle_mean", "idle_std",
+        "payload_entropy_bits_per_byte"
+      ],
+      "properties": {
+        "fwd_packets": { "type": "integer", "minimum": 0 },
+        "bwd_packets": { "type": "integer", "minimum": 0 },
+        "total_bytes_fwd": { "type": "integer", "minimum": 0 },
+        "total_bytes_bwd": { "type": "integer", "minimum": 0 },
+        "pkt_len_mean": { "type": "number", "minimum": 0 },
+        "pkt_len_std": { "type": "number", "minimum": 0 },
+        "pkt_len_max": { "type": "number", "minimum": 0 },
+        "pkt_len_min": { "type": "number", "minimum": 0 },
+        "fwd_pkt_len_mean": { "type": "number", "minimum": 0 },
+        "fwd_pkt_len_std": { "type": "number", "minimum": 0 },
+        "bwd_pkt_len_mean": { "type": "number", "minimum": 0 },
+        "bwd_pkt_len_std": { "type": "number", "minimum": 0 },
+        "iat_mean": { "type": "number", "minimum": 0 },
+        "iat_std": { "type": "number", "minimum": 0 },
+        "iat_min": { "type": "number", "minimum": 0 },
+        "iat_max": { "type": "number", "minimum": 0 },
+        "fwd_iat_mean": { "type": "number", "minimum": 0 },
+        "fwd_iat_std": { "type": "number", "minimum": 0 },
+        "bwd_iat_mean": { "type": "number", "minimum": 0 },
+        "bwd_iat_std": { "type": "number", "minimum": 0 },
+        "flow_bytes_per_s": { "type": "number", "minimum": 0 },
+        "flow_packets_per_s": { "type": "number", "minimum": 0 },
+        "syn_count": { "type": "integer", "minimum": 0 },
+        "ack_count": { "type": "integer", "minimum": 0 },
+        "fin_count": { "type": "integer", "minimum": 0 },
+        "rst_count": { "type": "integer", "minimum": 0 },
+        "psh_count": { "type": "integer", "minimum": 0 },
+        "urg_count": { "type": "integer", "minimum": 0 },
+        "init_win_bytes_fwd": { "type": "integer", "minimum": 0 },
+        "init_win_bytes_bwd": { "type": "integer", "minimum": 0 },
+        "active_mean": { "type": "number", "minimum": 0 },
+        "active_std": { "type": "number", "minimum": 0 },
+        "idle_mean": { "type": "number", "minimum": 0 },
+        "idle_std": { "type": "number", "minimum": 0 },
+        "payload_entropy_bits_per_byte": { "type": "number", "minimum": 0, "maximum": 8 },
+        "ja3": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "ja3s": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "tls_sni": { "type": "string", "maxLength": 253 }
+      }
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "anomaly_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "baseline_percentile": { "type": "number", "minimum": 0, "maximum": 1 },
+        "cluster_id": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code_system", "code", "display", "confidence"],
+        "properties": {
+          "code_system": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "code": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "display": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "evidence_refs": { "type": "array", "items": { "type": "string", "maxLength": 128 } }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer_model_id", "producer_version", "created_at"],
+      "properties": {
+        "producer_model_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "producer_version": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "preprocessing_chain": { "type": "array", "items": { "type": "string", "maxLength": 64 } },
+        "calibration_id": { "type": "string", "maxLength": 64 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "quality_flags": { "type": "array", "items": { "type": "string", "maxLength": 64 } }
+      }
+    },
+    "text_view": { "type": "string", "minLength": 1, "maxLength": 4096 }
+  }
+}
