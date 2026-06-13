@@ -15,10 +15,15 @@ export const ctiOntology: Ontology = {
     { id: "campaign", label: "Campaign", color: "hsl(280, 70%, 60%)" },
     { id: "indicator", label: "Indicator", color: "hsl(190, 70%, 50%)" },
     { id: "identity", label: "Identity", color: "hsl(50, 70%, 55%)" },
+    // Phase 3 — multi-modal fusion (spec: public/reports/ontology-corroborated-finding-spec.md)
+    { id: "flow_pattern", label: "Flow Pattern", color: "hsl(195, 80%, 60%)" },
+    { id: "corroborated_finding", label: "Corroborated Finding", color: "hsl(140, 60%, 50%)" },
   ],
   relationTypes: [
     "uses", "targets", "attributed-to", "communicates-with", "exploits",
     "delivers", "drops", "indicates", "mitigates", "derived-from", "related-to",
+    // Phase 3 — fusion edges (spec §2)
+    "corroborates", "contradicts", "matches_ioc",
   ],
   disclaimer: null,
   sampleText: `In December 2020, FireEye discovered that SolarWinds Orion software updates had been trojanized by APT-29 (Cozy Bear). The SUNBURST backdoor exploited CVE-2020-10148 and communicated via avsvmcloud[.]com (185.225.69.24). TEARDROP loaded Cobalt Strike beacons (T1059.001) for lateral movement.`,
