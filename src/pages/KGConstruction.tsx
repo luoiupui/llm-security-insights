@@ -25,6 +25,9 @@ import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-l
 import { toast } from "sonner";
 import { DomainBanner } from "@/components/DomainSwitch";
 import { AgentLoopPanel } from "@/components/AgentLoopPanel";
+import { MultiModalFusionMock } from "@/components/MultiModalFusionMock";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 
 const typeColors: Record<string, string> = {
   threat_actor: "bg-threat-critical/20 text-threat-critical",
@@ -1091,6 +1094,19 @@ export default function KGConstruction() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Collapsible className="mt-6">
+        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
+          <span className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-primary" />
+            Multi-Modal Fusion (mock) — External CTI ⊕ Internal CICIDS
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3">
+          <MultiModalFusionMock />
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
