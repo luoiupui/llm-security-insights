@@ -6,8 +6,8 @@
  */
 
 import { preprocessText, extractThreats, validateAgainstKB, detectConflicts } from "@/lib/threat-pipeline";
-import { scoreTriples, scoreEntityList, scoreOntologyConformance, scoreTurtleRoundtrip, type Triple, type ScoreResult } from "./scorers";
-import { getCorpus, type BenchCase, type TaskCategory, CATEGORIES } from "./corpus";
+import { scoreTriples, scoreEntityList, scoreOntologyConformance, scoreTurtleRoundtrip, scoreCorroborations, type Triple, type ScoreResult } from "./scorers";
+import { getCorpus, type BenchCase, type TaskCategory, CATEGORIES, GOLD_VERSION } from "./corpus";
 import { getOntology } from "@/lib/ontology";
 import type { Domain } from "@/contexts/DomainContext";
 
@@ -74,6 +74,17 @@ async function runCase(c: BenchCase, domain: Domain): Promise<CaseResult> {
         const f = k === 0 ? 1 : Math.max(0, 1 - k / 6);
         score = { precision: f, recall: f, f1: f, tp: 0, fp: k, fn: 0 };
         notes = k === 0 ? "no fabrication" : `${k} unsolicited items`;
+        break;
+      }
+      case "fusion_corroboration": {
+        // Phase 3 — extract `corroborates` triples from the pipeline output and
+        // match against gold (ttp, flow_ref) pairs. Pre-fusion-job baseline: 0.
+        const gold = (c.goldCorroborations ?? []).map(g => ({ ttp: g.ttp, flow_ref: g.flow_ref }));
+        const predicted = predictedTriples
+          .filter(t => t.p.toLowerCase() === "corroborates")
+          .map(t => ({ ttp: t.s, flow_ref: t.o }));
+        score = scoreCorroborations(predicted, gold);
+        notes = `${predicted.length} corroborates triple(s) vs ${gold.length} gold`;
         break;
       }
       default: {
