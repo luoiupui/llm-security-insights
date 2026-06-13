@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-06-13",
+  "description": "Major CDN / cloud ASNs and well-known IPv4 prefixes. Used by allowlistVerdict() to gate indicator_match vs behavioral_match edge creation. NOT a comprehensive ASN dump — seed list only; extend without code changes.",
+  "entries": [
+    { "name": "Cloudflare", "asn": 13335, "kind": "cdn", "ip_ranges": ["1.1.1.0/24", "1.0.0.0/24", "104.16.0.0/12", "172.64.0.0/13", "162.158.0.0/15"] },
+    { "name": "Akamai", "asn": 20940, "kind": "cdn", "ip_ranges": ["23.0.0.0/12", "23.32.0.0/11", "23.64.0.0/14", "104.64.0.0/10", "184.24.0.0/13"] },
+    { "name": "Fastly", "asn": 54113, "kind": "cdn", "ip_ranges": ["151.101.0.0/16", "199.232.0.0/16"] },
+    { "name": "Amazon CloudFront", "asn": 16509, "kind": "cdn", "ip_ranges": ["52.84.0.0/15", "54.182.0.0/16", "54.192.0.0/16", "54.230.0.0/15", "143.204.0.0/16"] },
+    { "name": "Amazon AWS", "asn": 16509, "kind": "cloud", "ip_ranges": ["3.0.0.0/9", "13.32.0.0/15", "18.32.0.0/11", "52.0.0.0/11", "54.144.0.0/12", "99.78.0.0/16"] },
+    { "name": "Google Cloud", "asn": 15169, "kind": "cloud", "ip_ranges": ["8.8.4.0/24", "8.8.8.0/24", "34.64.0.0/10", "35.184.0.0/13", "104.196.0.0/14"] },
+    { "name": "Microsoft Azure", "asn": 8075, "kind": "cloud", "ip_ranges": ["13.64.0.0/11", "20.0.0.0/8", "40.64.0.0/10", "52.96.0.0/12", "104.40.0.0/13"] }
+  ]
+}

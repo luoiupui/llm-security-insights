@@ -25,3 +25,12 @@ thresholds — mirrors the agent harness `needsApproval` pattern.
 Wiring not yet performed: `threat-conflicts` edge function, `src/lib/ontology/cti.ts`,
 DB schema for the new node/edge types, KG-Bench gold cases (would require a
 gold-version bump).
+
+---
+
+**Status update — Phase 1 landed (2026-06-13).** The internal-telemetry input
+contract and pure foundations are in place: see
+[`mem://features/flow-feature-ingest`](./flow-feature-ingest.md) for the T2
+flow-feature spec, JSON Schema, synthetic fixture, CDN/cloud ASN allow-list,
+and pure fusion math (`noisy_or` / `min` / `weighted` / `freshness`). Still
+spec/pure-code only — no DB or edge-function wiring.

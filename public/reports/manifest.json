@@ -90,6 +90,11 @@
       "name": "ontology-corroborated-finding-spec.md",
       "bytes": 0,
       "sha256": "spec-corroborated-finding"
+    },
+    {
+      "name": "cti-flow-feature-ingest-spec.md",
+      "bytes": 0,
+      "sha256": "spec-cti-flow-feature-ingest-v1"
     }
   ],
   "stats": {
