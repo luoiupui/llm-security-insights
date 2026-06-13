@@ -21,11 +21,11 @@ describe("scoreCorroborations", () => {
     const r = scoreCorroborations([], [{ ttp: "X", flow_ref: "f" }]);
     expect(r.f1).toBe(0);
   });
-  it("zero gold → perfect when nothing predicted", () => {
+  it("zero gold + zero predicted → perfect (vacuous)", () => {
     const r = scoreCorroborations([], []);
-    expect(r.f1).toBe(0); // F1 undefined collapses to 0 (P=1, R=1 only if both empty handled — kept conservative)
     expect(r.precision).toBe(1);
     expect(r.recall).toBe(1);
+    expect(r.f1).toBe(1);
   });
   it("counts false positives", () => {
     const r = scoreCorroborations(
