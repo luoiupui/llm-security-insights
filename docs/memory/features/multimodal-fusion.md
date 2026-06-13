@@ -22,9 +22,21 @@ Two-key promotion: a KG node may only carry `confirmed_threat` when a
 `CorroboratedFinding` joins it to internal telemetry above per-modality
 thresholds — mirrors the agent harness `needsApproval` pattern.
 
-Wiring not yet performed: `threat-conflicts` edge function, `src/lib/ontology/cti.ts`,
-DB schema for the new node/edge types, KG-Bench gold cases (would require a
-gold-version bump).
+Phase 1 SHIPPED (2026-06-13): pure fusion math (`src/lib/fusion`),
+CDN/cloud ASN allow-list, flow-feature ingest spec + JSON Schema, synthetic
+flow corpus, 24 unit tests. No runtime/schema impact.
+
+Phase 2 SHIPPED (2026-06-13): rules R11/R12/R13 implemented in
+`src/lib/conflicts/multimodal-rules.ts` (12 unit tests) and inlined into the
+`threat-conflicts` edge function. UI surfacing on Conflict Detection tab of
+`/attribution` shows dual-confidence bars (external vs. internal, freshness,
+fused before→after). Rules are no-ops when modality metadata is absent, so
+existing pipeline runs are unaffected.
+
+Phase 3 (pending, separate change): `CorroboratedFinding` ontology in
+`src/lib/ontology/cti.ts`, DB schema for the node/edge types, pipeline stage
+to materialise corroboration, and KG-Bench Cat 8 gold cases (with a
+gold-version bump per the cardinal rule).
 
 ---
 
