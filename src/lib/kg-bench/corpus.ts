@@ -7,6 +7,16 @@
 import type { Triple } from "./scorers";
 import type { Domain } from "@/contexts/DomainContext";
 
+/**
+ * Gold-corpus version. Bumped whenever cases are added/removed or scoring
+ * rubric changes — per the cardinal rule in `pipeline-stage-contracts`.
+ *
+ *   v1 — initial 7-category corpus (CTI + Clinical multilingual).
+ *   v2 — Phase 3 bump: adds `fusion_corroboration` category and the
+ *        CorroboratedFinding-aware cases (CTI + Clinical).
+ */
+export const GOLD_VERSION = "v2" as const;
+
 export type TaskCategory =
   | "fact_extraction"
   | "ontology_conformance"
@@ -14,7 +24,22 @@ export type TaskCategory =
   | "qa"
   | "repair"
   | "hallucination"
-  | "multilingual";
+  | "multilingual"
+  | "fusion_corroboration";
+
+/**
+ * A gold corroboration pair: the case asserts that a TTP described in the
+ * narrative text should be paired (via a `corroborates` edge) with an
+ * internal flow signature whose stable id is `flow_ref`. Until the fusion
+ * job lands, the pipeline will not emit these pairs and the case will
+ * score 0 — this is the intended baseline, ready to climb once the
+ * matcher exists.
+ */
+export interface CorroborationPair {
+  ttp: string;
+  flow_ref: string;
+  expected_conf_narrative_min?: number; // optional sanity bound
+}
 
 export interface BenchCase {
   id: string;
@@ -24,6 +49,8 @@ export interface BenchCase {
   goldEntities: string[];
   goldTriples: Triple[];
   language?: "en" | "ja" | "zh";
+  /** Present only on `fusion_corroboration` cases. */
+  goldCorroborations?: CorroborationPair[];
 }
 
 /* ── CTI corpus ── */
