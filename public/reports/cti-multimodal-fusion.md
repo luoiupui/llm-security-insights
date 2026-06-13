@@ -116,6 +116,9 @@ numeric layer.
 - Conflict rules R11/R12/R13: see `conflict-rules-multimodal-extension.md`.
 - Node/edge schema and STIX 2.1 sighting mapping: see
   `ontology-corroborated-finding-spec.md`.
+- Internal-telemetry input contract (T2 flow-feature record): see
+  `cti-flow-feature-ingest-spec.md` (Phase 1 spec + pure code: fusion math,
+  CDN/cloud ASN allow-list, synthetic fixture).
 - Visual contract: collapsible "Multi-Modal Fusion" panel on `/kg-construction`.
 
 Out of scope for this revision: a real CICIDS ingest path, flow-feature
