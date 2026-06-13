@@ -164,6 +164,15 @@ serve(async (req) => {
     // ── Rule 10: Confidence Propagation Consistency (NEW) ──
     conflicts.push(checkConfidencePropagation(nodes, edges));
 
+    // ── Rules 11–13: Multi-Modal Fusion (NEW — Phase 2) ──
+    // Backward-compatible: when inputs carry no modality / freshness metadata,
+    // each rule returns `pass` with an explanatory detail. See
+    // public/reports/conflict-rules-multimodal-extension.md and
+    // src/lib/conflicts/multimodal-rules.ts for the in-app reference impl.
+    conflicts.push(applyR11(nodes, edges));
+    conflicts.push(applyR12(edges));
+    conflicts.push(applyR13(nodes));
+
     // ── Compute Global Credibility Score ──
     const credibilityScore = computeCredibilityScore(nodes, edges, source_reliability);
 
