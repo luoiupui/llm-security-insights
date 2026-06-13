@@ -28,5 +28,6 @@ Strictly aligned with Chapters 2-5 of the user's research outline.
 - [Clinical Feature Ingest](./features/clinical-feature-ingest.md) — T2 heart-sound feature-vector contract (JSON Schema + FHIR mapping), spec only
 - [Multi-Modal Fusion](./features/multimodal-fusion.md) — External CTI ⊕ internal CICIDS fusion: CorroboratedFinding node, conflict rules R11–R13, mock panel; spec only
 - [Flow-Feature Ingest](./features/flow-feature-ingest.md) — T2 CICIDS-style flow record contract + pure fusion math + CDN/cloud allow-list (Phase 1, spec + pure code)
+- [CorroboratedFinding](./features/corroborated-finding.md) — Phase 3: kg_corroborated_findings table, dual-confidence storage rule, two-key promotion, STIX Sighting export, KG-Bench GOLD_VERSION v2 + fusion_corroboration category
 
 > Note: `mem://features/clinical-mode` is referenced in the live index but no body exists in the memory store yet; omitted here. Ask the agent to author it if needed.
