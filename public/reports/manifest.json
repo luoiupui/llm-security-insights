@@ -75,6 +75,21 @@
       "name": "white-paper.md",
       "bytes": 3744,
       "sha256": "ff35b7a955153ad2"
+    },
+    {
+      "name": "cti-multimodal-fusion.md",
+      "bytes": 0,
+      "sha256": "spec-multimodal-fusion"
+    },
+    {
+      "name": "conflict-rules-multimodal-extension.md",
+      "bytes": 0,
+      "sha256": "spec-conflict-rules-r11-r13"
+    },
+    {
+      "name": "ontology-corroborated-finding-spec.md",
+      "bytes": 0,
+      "sha256": "spec-corroborated-finding"
     }
   ],
   "stats": {
