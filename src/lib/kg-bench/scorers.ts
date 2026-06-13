@@ -105,3 +105,28 @@ export function scoreRedactionSpans(
 
   return { precision, recall, f1, tp, fp, fn, overRedaction, utility, benchScore, skipped: matchedGold.size };
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * KG-Bench `fusion_corroboration` category (Phase 3, GOLD_VERSION v2)
+ * Scores predicted `corroborates` triples against gold (ttp, flow_ref) pairs.
+ * Matching is case- and punctuation-insensitive (uses `norm`).
+ * ────────────────────────────────────────────────────────────────────── */
+
+export interface CorroborationPredicate { ttp: string; flow_ref: string }
+
+export function scoreCorroborations(
+  predicted: CorroborationPredicate[],
+  gold: CorroborationPredicate[],
+): ScoreResult {
+  const key = (c: CorroborationPredicate) => `${norm(c.ttp)}|${norm(c.flow_ref)}`;
+  const pSet = new Set(predicted.map(key));
+  const gSet = new Set(gold.map(key));
+  let tp = 0;
+  pSet.forEach(k => { if (gSet.has(k)) tp++; });
+  const fp = pSet.size - tp;
+  const fn = gSet.size - tp;
+  const precision = pSet.size ? tp / pSet.size : (gSet.size === 0 ? 1 : 0);
+  const recall = gSet.size ? tp / gSet.size : 1;
+  const f1 = (precision + recall) ? (2 * precision * recall) / (precision + recall) : 0;
+  return { precision, recall, f1, tp, fp, fn };
+}
