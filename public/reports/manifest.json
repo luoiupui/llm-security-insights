@@ -95,7 +95,13 @@
       "name": "cti-flow-feature-ingest-spec.md",
       "bytes": 0,
       "sha256": "spec-cti-flow-feature-ingest-v1"
+    },
+    {
+      "name": "hypergraph-pathway-technical-report.md",
+      "bytes": 14773,
+      "sha256": "living-doc-pathway-c-ph2-ph3"
     }
+
   ],
   "stats": {
     "logEntries": 17,
