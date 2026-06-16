@@ -80,15 +80,18 @@ serve(async (req) => {
       relations = [],
       causal_links = [],
       graph_native,  // our enhanced graph structure if available
-      mode = "attribute"
+      hyperedges = [],          // PH4: Pathway C native hyperedges (optional)
+      pathway = "B",            // "B" = triples (default), "C" = hyperedges, "both" = run both then merge
+      mode = "attribute",
     } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Use graph_native data if available (from our enhanced extraction), 
-    // otherwise fall back to flat entities/relations
-    const graphData = graph_native || {
+    // Build graph view per pathway. Pathway C projects hyperedges into edges
+    // by emitting one edge per ordered pair of participants per hyperedge,
+    // tagged with the parent hyperedge id so downstream paths remain traceable.
+    const triplesGraph = graph_native || {
       nodes: entities,
       edges: [...relations, ...causal_links.map((cl: any) => ({
         source: cl.cause,
@@ -99,6 +102,12 @@ serve(async (req) => {
       }))],
       subgraphs: [],
     };
+    const hyperedgesGraph = projectHyperedges(entities, hyperedges);
+    const graphData =
+      pathway === "C" ? hyperedgesGraph
+      : pathway === "both" ? mergeGraphs(triplesGraph, hyperedgesGraph)
+      : triplesGraph;
+
 
     let result: unknown;
 
