@@ -1,71 +1,82 @@
-# Hypergraph Augmentation — Feasibility & Plan
+# Hypergraph Pathway — Parallel Track (PH-series)
 
-## TL;DR
-**Don't replace, augment.** A full swap from STIX 2.1 triples → hypergraph breaks the entire downstream stack (KG-Bench scorers, conflict rules R1–R13, MITRE/CVE grounding, persistence schema, UI graph view, edge functions). Instead, introduce a **hyperedge layer that sits *above* the existing triple store** as the atomic "event" unit, while triples remain the lookup / scoring substrate. This preserves all current validation evidence (the 2.1% false-entity result from §10.2) and adds native event-centric explainability on top.
+## TL;DR (revised)
+**Don't replace, run in parallel.** The hypergraph approach becomes a **second, independent extraction pathway** that runs alongside the current triple-based pipeline on the same input. Both pathways share Stages 1–2 (preprocess + RAG) and Stage 4 (kb-validate, per-entity). They diverge at Stage 3 (extraction) and re-converge at Stage 6 (attribution + comparison panel). This makes the hypergraph claim **falsifiable by direct A/B**, not just augmented narrative.
 
-## Feasibility Verdict per Subsystem
+Phase H1 (foundations: `Hyperedge` type, decompose/reassemble, 10 unit tests) is already merged and behavior-neutral. The phases below are re-scoped from "augmentation" to "parallel pathway C".
 
-| Subsystem | Replace? | Augment? | Why |
-|---|---|---|---|
-| `threat-extract` 8-step CoT | No | **Yes** — add Step 4.5 "hyperedge grouping" | Schema is already nested JSON; add `hyperedges[]` field alongside `entities/relations/causal_links` |
-| STIX 2.1 ontology (`cti.ts`) | No | Keep | External interop (MISP, OpenCTI consumers) assumes triples |
-| `kb-validate` (MITRE/CVE grounding) | No | Unchanged | Per-entity check, hyperedge-agnostic |
-| `threat-conflicts` R1–R13 | No | **Add R14** (hyperedge-level conflict) | Existing rules stay; add joint-validity rule on hyperedges |
-| `kg_corroborated_findings` table | No | **Add `kg_hyperedges` table** | New table referencing existing entity IDs via array |
-| KG-Bench scorers | No | **Add Cat 10: Hyperedge Atomicity** | Score whether decomposed triples reassemble into the gold hyperedge |
-| `MultiModalFusionMock` / Attribution UI | Partial | Add "Event View" toggle | Render hyperedges as bordered cards grouping their triples |
-| `threat-agent` tools | No | Add `hyperedge_lookup` tool | Single-call provenance retrieval |
+## Pathway Map
 
-## Phased Plan
+```text
+                   ┌─ Pathway B (current, triple-native) ─┐
+Stage 1,2 ────────►│  Stage 3: GRAPH_NATIVE_COT (triples) │──► Stage 4 ──► Stage 5 (R1–R13) ──► Stage 6 ─┐
+(shared)           └──────────────────────────────────────┘                                              ├─► Comparison Panel
+                   ┌─ Pathway C (new, hyperedge-native) ──┐                                              │   (KG-Bench + UI)
+                   │  Stage 3': HYPEREDGE_COT (hyperedges)│──► Stage 4 ──► Stage 5' (R14 joint) ──► Stage 6 ┘
+                   └──────────────────────────────────────┘
+```
 
-### Phase H1 — Foundations (no behavior change)
-- Add `src/lib/ontology/hypergraph.ts`: `Hyperedge { id, type: 'event'|'campaign'|'fusion-finding'|'kill-chain', node_ids: string[], qualifiers: Record<string,unknown>, evidence_span, confidence, source_passage }`
-- JSON schema at `public/schemas/cti-hyperedges.v1.schema.json`
-- Pure functions: `decomposeToTriples(h)`, `reassembleFromTriples(triples)` for backward compat
-- Unit tests covering the SolarWinds sample (1 hyperedge → 7 triples → round-trip)
+Pathway C is selectable per-run via `pathway: "B" | "C" | "both"`; `"both"` runs them in parallel and scores deltas.
 
-### Phase H2 — Extractor opt-in
-- Extend `GRAPH_NATIVE_COT_PROMPT` with **Step 4.5: Hyperedge Grouping** — "before emitting causal links, group co-evidenced triples that describe one atomic event into a hyperedge; attach the verbatim source quote"
-- Output schema gains optional `hyperedges[]`; absence = backward compatible
-- Feature flag `VITE_HYPERGRAPH_ENABLED` defaults off; on → UI shows event cards
+## Revised Phases
 
-### Phase H3 — Conflict rule R14 (joint validity)
-- `src/lib/conflicts/hyperedge-rules.ts`: a hyperedge is rejected if ≥2 of its member triples individually conflict (date/actor/jurisdiction). Stronger than current per-triple R-rules — exactly the "Brittleness of Distribution" point in the note (§4).
-- 6 unit tests on existing CTI corpus
+### PH1 — Foundations ✅ (shipped)
+`hypergraph.ts`, JSON schema v1, decompose/reassemble, 10 tests. No behavior change. Already merged.
 
-### Phase H4 — Persistence
-- Migration: `kg_hyperedges (id, kg_id, type, node_ids uuid[], qualifiers jsonb, source_passage text, confidence numeric, created_at)` + GRANTs + RLS
-- No FK to entities (array of IDs) to keep migration cheap; integrity enforced in app layer
-- `kg-query` edge function gains `?include=hyperedges` param
+### PH2 — Parallel extractor (Stage 3')
+- New edge function `threat-extract-hyper/index.ts` (sibling of `threat-extract`, **not** a fork of its prompt).
+- Prompt `HYPEREDGE_NATIVE_COT_PROMPT`: 6 steps that emit `hyperedges[]` as primary output, with `decomposed_triples` auto-derived for downstream compatibility.
+- Same Gemini-3-flash backbone, same `domain` param, same I/O envelope as `threat-extract`.
+- Pipeline contract: add stage `extract_hyper` to `src/lib/threat-pipeline.ts` mirroring `extract`.
 
-### Phase H5 — KG-Bench Category 10 (the validation)
-This is the **innovation evidence step** mirroring §10.2:
-- Gold set: 10 CTI hyperedges (SolarWinds, NotPetya, FIN7-Carbanak, etc.)
-- Score 3 variants on same Gemini-3-flash backbone:
-  - **Triples-only** (current pipeline)
-  - **Triples + post-hoc grouping** (LLM-as-judge re-clusters)
-  - **Native hyperedge extraction** (Step 4.5 enabled)
-- Metrics: hyperedge precision/recall, provenance-trace cost (# DB lookups), human explanation time
-- Hypothesis under test: native hyperedge mode reduces multi-hop explanation traversal from N triples to 1, and lowers joint-error rate vs. post-hoc grouping
+### PH3 — Parallel conflict rules (Stage 5')
+- `src/lib/conflicts/hyperedge-rules.ts`: R14 (joint validity), R15 (qualifier consistency), R16 (provenance span overlap ≥ 1 token across member triples).
+- `threat-conflicts` accepts `mode: "triples" | "hyperedges"`; pathway C calls it in hyperedge mode.
+- 6 unit tests against existing CTI corpus.
 
-### Phase H6 — UI surfacing (minimal)
-- Attribution page: "Event View" toggle (default off). When on, group conflicts/findings into hyperedge cards with source quote at top.
-- No new page, no graph re-layout (HGNN visualization is explicitly out of scope — note §5.2)
+### PH4 — Parallel persistence
+- Migration: `kg_hyperedges (id, kg_id, type, node_ids uuid[], qualifiers jsonb, source_passage text, confidence numeric, pathway text default 'C', created_at)` + GRANTs + RLS (auth read, service write).
+- `kg_pathway_runs (id, report_id, pathway, extraction_ms, conflict_summary jsonb, kg_bench_score jsonb)` to record A/B results per source document.
+- `threat-kg-query` accepts `?pathway=B|C|both` and returns merged or side-by-side results.
 
-## Honest Risks (mirroring note §5)
-1. **Extraction reliability** — Gemini may produce malformed hyperedges; mitigated by JSON-schema-constrained decoding + decompose/reassemble round-trip test as a gate.
-2. **Larger-blast-radius errors** — one bad hyperedge = N bad triples. Mitigated by R14 (reject jointly-inconsistent hyperedges) and confidence floor.
-3. **Tooling immaturity** — we deliberately keep triples as the storage primitive; hypergraph is an *index* over them. No Neo4j swap, no HGNN.
-4. **Scope creep** — phases gated by KG-Bench Cat 10 results; if Phase H5 doesn't show measurable explanation-cost reduction, we ship H1–H3 only and document the negative result.
+### PH5 — Comparison harness (KG-Bench Cat 10 + Cat 11)
+The **innovation-evidence** step, framed as A/B not augmentation:
+- Cat 10 — **Hyperedge atomicity**: gold hyperedges (SolarWinds, NotPetya, FIN7-Carbanak, Lazarus-3CX, etc., n=10) scored against both pathways. Pathway B is scored via post-hoc `reassembleFromTriples`.
+- Cat 11 — **Explanation cost**: # DB lookups + tokens needed to answer "why is actor X attributed to event Y?" for each pathway. Hypothesis: C ≤ B / 3.
+- Runner: extend `src/lib/kg-bench/runner.ts` with `pathway` axis; persist to `kg_pathway_runs`. Negative results documented, not hidden.
+
+### PH6 — UI panels (parallel surface)
+Two new panels, both gated by `VITE_HYPERGRAPH_ENABLED`:
+- **`HypergraphPathwayPanel`** on KG Construction page — live side-by-side run: same input, two columns (B vs C), per-stage timing, triple/hyperedge counts, conflict counts.
+- **`PathwayComparisonPanel`** on Experiments page — KG-Bench Cat 10/11 deltas across the corpus, with a verdict badge (C wins / tie / B wins) per metric. Mirrors the §10.2 ablation table style already used.
+- Existing Attribution page gets a thin "view as hyperedges" toggle (re-uses `reassembleFromTriples` when pathway B is active).
+
+### PH7 — Agent harness wiring (optional, gated on PH5 result)
+- Add `extract_hyper` tool to `threat-agent` so Pathway A (AI-SDK loop) can call either extractor.
+- Skip if PH5 shows no measurable C advantage; document negative result in `mem://features/kg-bench`.
+
+## What changed vs the previous plan
+
+| Aspect | Old (augment) | New (parallel) |
+|---|---|---|
+| Stage 3 prompt | Add Step 4.5 to existing CoT | Separate `HYPEREDGE_COT` in sibling edge function |
+| Conflict rules | Add R14 to R1–R13 | Separate hyperedge rule module, dispatched by mode |
+| Persistence | One `kg_hyperedges` table | Same + `kg_pathway_runs` A/B record |
+| KG-Bench | One new category | Two new categories (atomicity + explanation cost) framed as A/B |
+| UI | One "Event View" toggle | Two dedicated panels for live and corpus-level comparison |
+| Falsifiability | Mixed with current pipeline | **Same input, two pipelines, scored independently** |
+
+## Honest Risks (unchanged from prior plan, restated)
+1. Extraction reliability — schema-constrained decoding + round-trip gate.
+2. Larger blast radius — R14–R16 reject jointly inconsistent hyperedges; confidence floor.
+3. Tooling immaturity — hyperedges remain an index; no Neo4j, no HGNN.
+4. Cost — running both pathways ~2× LLM spend on benchmark days; gate via `pathway="both"` opt-in, default `"B"`.
 
 ## Out of Scope
-- Replacing STIX 2.1
-- Hypergraph neural networks (HGNN)
-- New graph database (Hyper-DB, RDF-star)
-- Clinical-domain hyperedges (deferred to a follow-up)
+STIX 2.1 replacement, HGNN, new graph DB, clinical hyperedges, real-time dual-write in production paths.
 
 ## Deliverable Order
-H1 → H2 → H3 → (gate: tests green) → H4 → H5 → H6. Each phase is independently shippable and reversible by the feature flag.
+PH1 ✅ → PH2 → PH3 → (gate: tests green + 1 sample doc roundtrips) → PH4 → PH5 → PH6 → PH7 (conditional).
 
 ---
-Proceed with **Phase H1** (foundations + tests, zero behavior change)?
+Proceed with **PH2** (sibling `threat-extract-hyper` edge function + `HYPEREDGE_NATIVE_COT_PROMPT` + pipeline-stage entry)?
