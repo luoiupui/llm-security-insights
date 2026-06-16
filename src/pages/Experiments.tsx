@@ -23,6 +23,7 @@ import { corpusStats } from "@/lib/test-corpus";
 import { useToast } from "@/hooks/use-toast";
 import { ReportDownloads } from "@/components/ReportDownloads";
 import { KGBenchPanel } from "@/components/KGBenchPanel";
+import { PathwayComparisonPanel } from "@/components/PathwayComparisonPanel";
 
 const chartStyle = {
   background: "hsl(220, 18%, 10%)",
@@ -331,11 +332,17 @@ export default function Experiments() {
           <TabsTrigger value="smoke">Smoke Test (n=30)</TabsTrigger>
           <TabsTrigger value="systest">System Test</TabsTrigger>
           <TabsTrigger value="kgbench">KG-Bench</TabsTrigger>
+          <TabsTrigger value="pathway">Pathway B vs C</TabsTrigger>
         </TabsList>
 
         <TabsContent value="kgbench" className="mt-4">
           <KGBenchPanel />
         </TabsContent>
+
+        <TabsContent value="pathway" className="mt-4">
+          <PathwayComparisonPanel />
+        </TabsContent>
+
 
         {/* ── System Comparison ── */}
         <TabsContent value="comparison" className="mt-4 space-y-4">

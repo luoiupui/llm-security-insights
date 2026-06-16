@@ -379,3 +379,48 @@ Each scored case fires a best-effort `persistPathwayRun` for both pathways into 
 - Subject-clustering for B's atomicity rewards single-subject n-ary events. The two gold cases are multi-subject precisely so this advantage doesn't pretend B is doing what it isn't.
 
 **PH6 is unblocked**: the `HypergraphPathwayPanel` (live A/B on KG Construction) and `PathwayComparisonPanel` (corpus deltas on Experiments) can now read `kg_pathway_runs` and CaseResult.pathwayMetrics directly.
+
+---
+
+## 10. PH6 — Pathway C panels (delivered 2026-06-16)
+
+PH6 surfaces Pathway C to analysts. Two panels, both gated to CTI (the domain switch is honoured at the component boundary, not just the edge function).
+
+### 10.1 `HypergraphPathwayPanel` — live A/B on KG Construction
+File: `src/components/HypergraphPathwayPanel.tsx`. Mounted in `src/pages/KGConstruction.tsx` as a collapsible section between the KG tabs and the multi-modal fusion mock; `defaultOpen` so reviewers see the A/B without hunting.
+
+What it does on each run:
+1. Calls `preprocessText` once, then **sequentially** `extractThreats` (Pathway B) and `extractHyperedges` (Pathway C) on the same cleaned text. Sequential, not parallel — keeps a clean per-pathway latency reading.
+2. Renders side-by-side cards: triple count + latency on the B side; hyperedge count, average arity, max arity, and a compact arity histogram on the C side. A scrollable list shows the first 4 hyperedges with type, joint confidence, participant set, and the ≤ 240-char source passage.
+3. "Persist run" button writes two `kg_pathway_runs` rows (one per pathway) plus all hyperedges into `kg_hyperedges`. Best-effort — RLS denial is surfaced as a toast, not a fatal error.
+
+When the domain is Clinical, the panel renders a dimmed callout instead of the editor and disables the Run button. The CTI-only constraint is enforced in three places (extractor, persistence schema CHECK, and this UI guard).
+
+### 10.2 `PathwayComparisonPanel` — corpus deltas on Experiments
+File: `src/components/PathwayComparisonPanel.tsx`. Mounted as a new tab `Pathway B vs C` on `/experiments`.
+
+What it does:
+1. `fetchPathwayRuns()` pulls the 200 most recent rows from `kg_pathway_runs`, then pairs by `source_label` (most recent B + most recent C).
+2. Two verdict cards aggregate across paired sources:
+   - **Atomicity (Cat 10)** — verdict positive when `C − B ≥ 0.10`.
+   - **Explanation cost (Cat 11)** — verdict positive when `C ≤ B / 3` (the PH plan hypothesis, verbatim).
+3. A monospace table lists every paired source with triple count, hyperedge count, both atomicity scores, both costs, and both latencies. Empty cells are explicit `—`, never `0`.
+
+The panel is deliberately **falsifiable**: if the corpus runs accumulate evidence against the hypothesis, the verdict flips to amber and the badge reads "C cheaper, hypothesis NOT met" or "B unexpectedly wins". No tuning knob would let us hide a negative result.
+
+### 10.3 Mounting summary
+| Page | Element | Behaviour |
+| --- | --- | --- |
+| `/kg-construction` | Collapsible §, default open | Live A/B per pasted passage; optional persistence |
+| `/experiments` | Tab `Pathway B vs C` | Corpus-level aggregation, verdicts, per-source table |
+
+No existing panels were modified; both are pure additions. 97/97 project tests pass.
+
+### 10.4 What PH6 deliberately does not do
+- No edits to the Attribution page (`/attribution`). The PH plan reserved a "view as hyperedges" toggle there for **after** PH7; PH6 stops at observability.
+- No automatic persistence on the live A/B — the user clicks "Persist run". Drive-by traffic should not pollute `kg_pathway_runs`.
+- No clinical adaptation. Period.
+- No charts beyond the in-card arity histogram and the verdict-card numerics — comparison clarity beats decoration here.
+
+### 10.5 Ready for PH7 (conditional)
+PH7 (agent harness wiring) was made conditional on PH5 showing measurable C wins. The corpus comparison panel is the gate: once the first run-batch is persisted from KG-Bench Cat 10/11, the verdict cards will say whether PH7 is worth doing.

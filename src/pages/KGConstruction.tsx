@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { DomainBanner } from "@/components/DomainSwitch";
 import { AgentLoopPanel } from "@/components/AgentLoopPanel";
 import { MultiModalFusionMock } from "@/components/MultiModalFusionMock";
+import { HypergraphPathwayPanel } from "@/components/HypergraphPathwayPanel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 
@@ -1095,6 +1096,19 @@ export default function KGConstruction() {
         </TabsContent>
       </Tabs>
 
+      <Collapsible className="mt-6" defaultOpen>
+        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
+          <span className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-primary" />
+            Pathway C (hypergraph) — live A/B vs Pathway B
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3">
+          <HypergraphPathwayPanel />
+        </CollapsibleContent>
+      </Collapsible>
+
       <Collapsible className="mt-6">
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
           <span className="flex items-center gap-2">
@@ -1107,6 +1121,7 @@ export default function KGConstruction() {
           <MultiModalFusionMock />
         </CollapsibleContent>
       </Collapsible>
+
     </div>
   );
 }
