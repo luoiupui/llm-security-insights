@@ -230,6 +230,65 @@ export async function extractThreats(
   return data;
 }
 
+/* ── Layer 2' (Pathway C): Hyperedge-Native Extraction (CTI only, PH2) ── */
+
+export interface HyperedgeRecord {
+  id: string;
+  type: "event" | "campaign" | "fusion-finding" | "kill-chain";
+  node_ids: string[];
+  source_passage: string;
+  confidence: number;
+  qualifiers?: Record<string, unknown>;
+}
+
+export interface HyperedgeExtractionResult {
+  pathway: "C";
+  source_type: string;
+  source_reliability: number;
+  timestamp: string;
+  extraction_method: "hyperedge_native_cot";
+  domain: "cti";
+  repro: { deterministic: boolean; temperature: number; seed: number | null };
+  rag_used: boolean;
+  extraction_ms: number;
+  hypergraph: {
+    entities: ThreatEntity[];
+    hyperedges: HyperedgeRecord[];
+    subgraphs: { name: string; type: string; hyperedge_ids: string[] }[];
+    graph_warnings: { type: string; detail: string; affected_items?: string[] }[];
+    graph_metadata: { entity_count: number; hyperedge_count: number; avg_arity: number };
+  };
+  derived: {
+    entities: ThreatEntity[];
+    relations: ThreatRelation[];
+  };
+}
+
+/**
+ * Pathway C extractor — sibling of `extractThreats`. CTI ONLY in PH2.
+ * Same input shape as Pathway B; output is hyperedge-primary with a
+ * derived triple projection so downstream R1–R13 / KG-Bench keep working.
+ */
+export async function extractHyperedges(
+  text: string,
+  sourceType: string = "report",
+  sourceReliability: number = 0.8,
+  ragContext: string = "",
+  repro?: Partial<ReproConfig>,
+): Promise<HyperedgeExtractionResult> {
+  const r = { ...DEFAULT_REPRO, ...(repro || {}) };
+  const { data, error } = await supabase.functions.invoke("threat-extract-hyper", {
+    body: {
+      text, source_type: sourceType, source_reliability: sourceReliability,
+      rag_context: ragContext,
+      deterministic: r.deterministic, temperature: r.temperature, seed: r.seed,
+      domain: "cti",
+    },
+  });
+  if (error) throw new Error(`Hyperedge extraction failed: ${error.message}`);
+  return data as HyperedgeExtractionResult;
+}
+
 /* ── Layer A: Authoritative KB Validation (deterministic) ── */
 
 export async function validateAgainstKB(
