@@ -268,3 +268,115 @@ export function exportBenchMarkdown(run: BenchRun): string {
   lines.push(`Adapted from LLM-KG-Bench 3.0 (arXiv:2505.13098). Upstream evaluates an LLM call in isolation; this run evaluates the full pipeline (Preprocess → Graph-Native Extract → KB-Validate → Conflicts). Triple matching is case- and punctuation-insensitive over (subject, predicate, object). Hallucination score rewards empty output on no-fact paragraphs. Ontology-conformance scores predicted entity types against the active ${run.domain} ontology.`);
   return lines.join("\n");
 }
+
+/* ════════════════════════════════════════════════════════════════════
+ * PH5 — Hypergraph pathway scoring helpers (CTI only)
+ * ════════════════════════════════════════════════════════════════════ */
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
+
+function jaccard(a: string[], b: string[]): number {
+  if (a.length === 0 && b.length === 0) return 1;
+  const sa = new Set(a.map(norm));
+  const sb = new Set(b.map(norm));
+  let inter = 0;
+  for (const x of sa) if (sb.has(x)) inter++;
+  const union = sa.size + sb.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+/** Cat 10 — best-match Jaccard between each gold edge and any predicted edge. */
+export function atomicityF1(
+  gold: { node_ids: string[] }[],
+  pred: { node_ids: string[] }[],
+): number {
+  if (gold.length === 0) return 0;
+  let total = 0;
+  for (const g of gold) {
+    let best = 0;
+    for (const p of pred) best = Math.max(best, jaccard(g.node_ids, p.node_ids));
+    total += best;
+  }
+  return +(total / gold.length).toFixed(3);
+}
+
+/** Best single-edge participant coverage count (used for diagnostic display). */
+export function bestCoverage(
+  gold: { node_ids: string[] }[],
+  pred: { node_ids: string[] }[],
+): number {
+  let best = 0;
+  for (const g of gold) {
+    const sg = new Set(g.node_ids.map(norm));
+    for (const p of pred) {
+      let n = 0;
+      const sp = new Set(p.node_ids.map(norm));
+      for (const x of sg) if (sp.has(x)) n++;
+      if (n > best) best = n;
+    }
+  }
+  return best;
+}
+
+/**
+ * Cat 11 — explanation cost = # KG lookups to answer "why are these
+ * participants linked?". Pathway C: 1 if a single hyperedge covers all
+ * answer_participants, else the number of edges needed to cover them
+ * (greedy set cover). Pathway B: triple-walk fallback = # of triples
+ * needed to connect all answer_participants pairwise; without per-edge
+ * pathway tags we conservatively use total triple count as the
+ * upper-bound cost. The hypothesis is C ≤ B / 3.
+ */
+export function explanationCost(
+  answer: string[],
+  edges: { node_ids: string[] }[],
+  triplesUpperBound: number,
+): number {
+  if (answer.length === 0) return 0;
+  if (edges.length === 0) {
+    // No edge view at all (Pathway B without reassembly) — fall back to
+    // the # of pairwise relations needed = C(n,2) bounded by triple count.
+    if (triplesUpperBound > 0) {
+      const pairs = (answer.length * (answer.length - 1)) / 2;
+      return Math.min(triplesUpperBound, Math.max(pairs, 1));
+    }
+    return answer.length; // worst case
+  }
+  // Greedy set cover.
+  const want = new Set(answer.map(norm));
+  let cost = 0;
+  while (want.size > 0) {
+    let best: { edge: { node_ids: string[] }; gain: number } | null = null;
+    for (const e of edges) {
+      let gain = 0;
+      for (const n of e.node_ids) if (want.has(norm(n))) gain++;
+      if (!best || gain > best.gain) best = { edge: e, gain };
+    }
+    if (!best || best.gain === 0) {
+      // remaining participants not in any edge → +1 per missing
+      cost += want.size;
+      break;
+    }
+    cost += 1;
+    for (const n of best.edge.node_ids) want.delete(norm(n));
+  }
+  return cost;
+}
+
+/**
+ * Cluster triples into pseudo-hyperedges by shared subject. This is the
+ * strongest reassembly possible without `evidence: hyperedge:<id>` tags
+ * (which Pathway B does not emit). It deliberately overestimates Pathway
+ * B's atomicity — the comparison still favours C, by design.
+ */
+export function clusterTriplesAsHyperedges(
+  triples: Triple[],
+): { node_ids: string[] }[] {
+  const bySubject = new Map<string, Set<string>>();
+  for (const t of triples) {
+    const k = norm(t.s);
+    if (!bySubject.has(k)) bySubject.set(k, new Set([t.s]));
+    bySubject.get(k)!.add(t.o);
+  }
+  return Array.from(bySubject.values()).map(set => ({ node_ids: Array.from(set) }));
+}
