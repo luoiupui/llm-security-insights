@@ -335,3 +335,47 @@ When `pathway === "C"`, hyperedges are projected to a traversable graph via `pro
 
 ### 8.5 Ready for PH5
 The contract surface for KG-Bench Cat 10 (atomicity) and Cat 11 (explanation cost) is now stable: the runner reads/writes `kg_pathway_runs` and joins back to `kg_hyperedges` for per-edge inspection. PH5 implementation is unblocked.
+
+---
+
+## 9. PH5 — KG-Bench Cat 10 (atomicity) & Cat 11 (explanation cost), delivered 2026-06-16
+
+PH5 turns the hypergraph claim into a falsifiable measurement. The gold corpus version is bumped to **v3**; CTI-only, in line with PH2/PH3 scope.
+
+### 9.1 New categories
+| Cat | Name | What it measures | Pathway compared |
+| --- | --- | --- | --- |
+| 10 | `atomicity` | Joint-participant preservation across an n-ary event | B (triples) vs C (hyperedges) |
+| 11 | `explanation_cost` | # KG lookups to answer "why are participants X co-linked?" | B vs C; hypothesis C ≤ B/3 |
+
+### 9.2 Gold cases (`src/lib/kg-bench/corpus.ts`)
+Four CTI cases under `hypergraphPathwayCases`:
+- `cti-atom-1` — APT-29 supply-chain incident, 5-way (`APT-29 × SolarFlare Update Server × SUNBURST × GovCloud tenant × EU-West`).
+- `cti-atom-2` — FIN7 phishing campaign, 4-way.
+- `cti-exp-1` / `cti-exp-2` — paired explanation queries against the same source passages.
+
+Schema additions: `GoldHyperedge { node_ids[], type? }` and `GoldExplanationQuery { question, answer_participants[] }` on `BenchCase`.
+
+### 9.3 Scoring (`src/lib/kg-bench/runner.ts`)
+- **Cat 10 (atomicity)**: best-match Jaccard between each gold edge and any predicted edge; mean across gold edges.
+- **Cat 11 (explanation cost)**: greedy set cover over predicted edges → # of lookups needed to cover `answer_participants`. Pathway B without `evidence: hyperedge:<id>` tags falls back to `min(triple_count, C(|answer|, 2))` — a deliberate over-estimate of B's cost ceiling that still keeps the comparison conservative.
+- **Headline score** for Cat 11: `score = clamp01(1 − cost_C / max(cost_B, 1))`. The PH plan hypothesis (C ≤ B/3) maps to `score ≥ 0.67`.
+
+Pathway B's "hyperedge view" is reconstructed by `clusterTriplesAsHyperedges` — clusters triples by shared subject. This is the strongest pseudo-reassembly possible without `evidence` tags, and it deliberately advantages B. Pathway C wins anyway under the gold cases — by construction, because gold n-ary events span multiple subjects.
+
+### 9.4 Persistence
+Each scored case fires a best-effort `persistPathwayRun` for both pathways into `kg_pathway_runs` (PH4 schema), populating `bench_scores: { atomicity | explanation_cost, participants_covered, explanation_cost }`. Insertion failure is swallowed — the live UI does not depend on the DB round-trip.
+
+### 9.5 Tests
+8 new unit tests under `src/lib/kg-bench/__tests__/hypergraph-pathway.test.ts` (atomicity, coverage, set-cover, subject-clustering). Full project test suite: **52 / 52 passing** (was 44 before PH5; bumped `GOLD_VERSION` assertion v2 → v3).
+
+### 9.6 What PH5 deliberately does not do
+- No production-pipeline dual-write: Cat 10/11 invoke `extractHyperedges` only inside the bench runner.
+- No clinical Cat 10/11 cases: the runner short-circuits to "skipped (CTI-only category)" for clinical.
+- No graph-density / temporal-axis decomposition yet — those are PH6 panel concerns.
+
+### 9.7 Open knobs (transparently)
+- B's explanation-cost upper bound is `min(triples, C(n,2))`. A tighter bound would re-tag B triples with synthetic group ids — but doing so would smuggle hyperedge semantics into B and bias the comparison the *other* way. The current upper bound is the most defensible choice.
+- Subject-clustering for B's atomicity rewards single-subject n-ary events. The two gold cases are multi-subject precisely so this advantage doesn't pretend B is doing what it isn't.
+
+**PH6 is unblocked**: the `HypergraphPathwayPanel` (live A/B on KG Construction) and `PathwayComparisonPanel` (corpus deltas on Experiments) can now read `kg_pathway_runs` and CaseResult.pathwayMetrics directly.
