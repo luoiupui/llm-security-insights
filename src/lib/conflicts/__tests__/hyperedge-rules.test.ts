@@ -57,7 +57,7 @@ describe("R15 — intra-hyperedge qualifier consistency", () => {
   });
 
   it("fails when an array-valued qualifier has >1 distinct entry", () => {
-    const hs = [baseHE({ id: "h_bad", qualifiers: { occurred_at: ["2020-03", "2019-07"] } })];
+    const hs = [baseHE({ id: "h_bad", qualifiers: { occurred_at: ["2020-03", "2019-07"] as unknown as string } })];
     const r = applyR15(hs);
     expect(r.status).toBe("fail");
     expect(r.affected_items).toContain("h_bad");
