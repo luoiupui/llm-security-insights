@@ -67,7 +67,28 @@ serve(async (req) => {
       source_reliability = 0.8,
       graph_native,
       domain = "cti",
+      mode = "triples",        // "triples" | "hyperedges"  (PH3, Pathway C)
+      hyperedges = [],          // only used when mode === "hyperedges"
     } = await req.json();
+
+    // ── Pathway C dispatch (PH3): hyperedge-native joint-validity rules ──
+    // Runs IN ADDITION to the standard triple-mode rules below, so the
+    // caller still gets R1–R13 on the derived triple projection. CTI only.
+    let hyperedgeBlock: {
+      conflicts: Array<{ rule: string; status: string; type: string; detail: string; affected_items: string[] }>;
+      summary: { total_rules: number; passed: number; warnings: number; failures: number };
+      rejected_hyperedge_ids: string[];
+    } | null = null;
+    if (mode === "hyperedges" && Array.isArray(hyperedges) && hyperedges.length > 0) {
+      if (domain !== "cti") {
+        return new Response(
+          JSON.stringify({ error: "hyperedge mode is CTI-only in PH3" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      hyperedgeBlock = runHyperedgeRulesInline(hyperedges);
+    }
+
 
     // Clinical mode: run only domain-agnostic structural checks; skip MITRE-specific TTP rules.
     if (domain === "clinical") {
