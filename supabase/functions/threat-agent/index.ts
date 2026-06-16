@@ -346,6 +346,8 @@ serve(async (req) => {
           kb_accuracy: (scratch.kbValidation as { accuracy?: number } | undefined)?.accuracy,
           credibility: (scratch.conflicts as { credibility_score?: number } | undefined)?.credibility_score,
           attribution: (scratch.attribution as { attributed_actor?: string } | undefined)?.attributed_actor,
+          // PH7 — surfaced when the agent chose Pathway C
+          hyperedges: (scratch.hyper as { hypergraph?: { hyperedges?: unknown[] } } | undefined)?.hypergraph?.hyperedges?.length ?? 0,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
