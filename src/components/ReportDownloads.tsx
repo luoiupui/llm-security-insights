@@ -43,6 +43,7 @@ export function ReportDownloads() {
       const fileNames = new Set<string>(manifest.files.map((f) => f.name));
       fileNames.add("experiments-academic-report.pdf");
       fileNames.add("experiments-academic-report.md");
+      fileNames.add("hypergraph-pathway-technical-report.md");
       fileNames.add("manifest.json");
 
       const zip = new JSZip();
