@@ -15,7 +15,7 @@ import type { Domain } from "@/contexts/DomainContext";
  *   v2 — Phase 3 bump: adds `fusion_corroboration` category and the
  *        CorroboratedFinding-aware cases (CTI + Clinical).
  */
-export const GOLD_VERSION = "v2" as const;
+export const GOLD_VERSION = "v3" as const;
 
 export type TaskCategory =
   | "fact_extraction"
@@ -25,7 +25,10 @@ export type TaskCategory =
   | "repair"
   | "hallucination"
   | "multilingual"
-  | "fusion_corroboration";
+  | "fusion_corroboration"
+  | "atomicity"          // PH5 / Cat 10 — joint-participant preservation (Pathway C only)
+  | "explanation_cost";  // PH5 / Cat 11 — # lookups to answer "why X→Y?" (B vs C ratio)
+
 
 /**
  * A gold corroboration pair: the case asserts that a TTP described in the
