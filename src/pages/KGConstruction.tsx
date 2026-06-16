@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { DomainBanner } from "@/components/DomainSwitch";
 import { AgentLoopPanel } from "@/components/AgentLoopPanel";
 import { MultiModalFusionMock } from "@/components/MultiModalFusionMock";
+import { HypergraphPathwayPanel } from "@/components/HypergraphPathwayPanel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 
