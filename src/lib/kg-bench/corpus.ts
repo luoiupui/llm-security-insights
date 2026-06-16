@@ -44,6 +44,20 @@ export interface CorroborationPair {
   expected_conf_narrative_min?: number; // optional sanity bound
 }
 
+/** PH5 / Cat 10 — gold n-ary event for atomicity scoring. */
+export interface GoldHyperedge {
+  id?: string;
+  type?: "event" | "campaign" | "fusion-finding" | "kill-chain";
+  node_ids: string[];
+}
+
+/** PH5 / Cat 11 — gold explanation query for cost-of-explanation scoring. */
+export interface GoldExplanationQuery {
+  question: string;
+  /** Participants whose joint co-occurrence is the answer. */
+  answer_participants: string[];
+}
+
 export interface BenchCase {
   id: string;
   category: TaskCategory;
@@ -54,7 +68,12 @@ export interface BenchCase {
   language?: "en" | "ja" | "zh";
   /** Present only on `fusion_corroboration` cases. */
   goldCorroborations?: CorroborationPair[];
+  /** Present only on `atomicity` cases. */
+  goldHyperedges?: GoldHyperedge[];
+  /** Present only on `explanation_cost` cases. */
+  goldExplanation?: GoldExplanationQuery;
 }
+
 
 /* ── CTI corpus ── */
 export const ctiCases: BenchCase[] = [
