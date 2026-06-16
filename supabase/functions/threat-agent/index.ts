@@ -160,7 +160,32 @@ serve(async (req) => {
           text: z.string(),
           mode: z.enum(["full", "ner", "re", "causality"]).default("full"),
           use_rag: z.boolean().default(true),
-        }),
+      }),
+      extract_hyper: tool({
+        description:
+          "PH7 / Pathway C — Hyperedge CoT extraction for CTI. Returns native n-ary hyperedges " +
+          "(actor + tool + target + region/time as ONE edge) instead of pairwise triples. " +
+          "Prefer for passages describing joint events with ≥3 participants. CTI-only.",
+        inputSchema: z.object({ text: z.string() }),
+        execute: async ({ text }) => {
+          const pre = scratch.preprocess as Record<string, unknown> | undefined;
+          const r = await invokeFn("threat-extract-hyper", {
+            text,
+            source_type: pre?.source_type,
+            reliability: pre?.reliability_score,
+          }) as Record<string, unknown>;
+          scratch.hyper = r;
+          const hg = r.hypergraph as { hyperedges?: Array<{ node_ids?: unknown[] }> } | undefined;
+          const edges = hg?.hyperedges ?? [];
+          const arities = edges.map((e) => (e.node_ids?.length ?? 0));
+          const avg = arities.length ? arities.reduce((a, b) => a + b, 0) / arities.length : 0;
+          return {
+            hyperedges: edges.length,
+            avg_arity: +avg.toFixed(2),
+            max_arity: arities.length ? Math.max(...arities) : 0,
+          };
+        },
+      }),
         execute: async ({ text, mode, use_rag }) => {
           const pre = scratch.preprocess as Record<string, unknown> | undefined;
           const rag = scratch.rag as { context_block?: string } | undefined;
