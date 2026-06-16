@@ -99,6 +99,78 @@ async function runCase(c: BenchCase, domain: Domain): Promise<CaseResult> {
         notes = `${predicted.length} corroborates triple(s) vs ${gold.length} gold`;
         break;
       }
+      case "atomicity":
+      case "explanation_cost": {
+        // PH5 — Pathway C (hypergraph) vs Pathway B (triples) comparison.
+        // CTI only; for clinical bench, treat as no-data.
+        if (domain !== "cti") {
+          score = { precision: 0, recall: 0, f1: 0, tp: 0, fp: 0, fn: 0 };
+          notes = "skipped (CTI-only category)";
+          break;
+        }
+        const pathwayMetrics: Partial<Record<Pathway, PathwayMetric>> = {};
+        // Triples-side hyperedge view (Pathway B): cluster by shared subject
+        // — the strongest pseudo-reassembly possible without `evidence` tags.
+        const bEdges = clusterTriplesAsHyperedges(predictedTriples);
+        // Native hyperedges (Pathway C):
+        let cEdges: { node_ids: string[] }[] = [];
+        try {
+          const h = await extractHyperedges(pre.cleaned_text, pre.source_type, pre.reliability_score);
+          cEdges = (h.hypergraph?.hyperedges ?? []).map(e => ({ node_ids: e.node_ids }));
+        } catch (err: any) {
+          notes = `hyperedge extraction failed: ${err?.message ?? "unknown"}`;
+        }
+
+        if (c.category === "atomicity") {
+          const gold = c.goldHyperedges ?? [];
+          const bF1 = atomicityF1(gold, bEdges);
+          const cF1 = atomicityF1(gold, cEdges);
+          pathwayMetrics.B = { f1: bF1, cost: 0, participantsCovered: bestCoverage(gold, bEdges) };
+          pathwayMetrics.C = { f1: cF1, cost: 0, participantsCovered: bestCoverage(gold, cEdges) };
+          // Headline score = Pathway C (the system-under-test for Cat 10).
+          score = { precision: cF1, recall: cF1, f1: cF1, tp: 0, fp: 0, fn: 0 };
+          notes = `B-atomicity=${bF1.toFixed(2)}  C-atomicity=${cF1.toFixed(2)}  (gold n-ary=${gold.length})`;
+        } else {
+          // explanation_cost
+          const q = c.goldExplanation;
+          const answer = q?.answer_participants ?? [];
+          const bCost = explanationCost(answer, bEdges, predictedTriples.length);
+          const cCost = explanationCost(answer, cEdges, 0); // Pathway C: 1 lookup if covered, else fallback
+          // Score = 1 - cost_C / max(cost_B, 1), clamped to [0,1]. PH plan hypothesis: C ≤ B/3 → score ≥ 0.67.
+          const ratio = bCost > 0 ? cCost / bCost : 1;
+          const f = Math.max(0, Math.min(1, 1 - ratio));
+          pathwayMetrics.B = { f1: 0, cost: bCost, participantsCovered: bestCoverage([{ node_ids: answer }], bEdges) };
+          pathwayMetrics.C = { f1: 1, cost: cCost, participantsCovered: bestCoverage([{ node_ids: answer }], cEdges) };
+          score = { precision: f, recall: f, f1: f, tp: 0, fp: 0, fn: 0 };
+          notes = `B-cost=${bCost} lookups  C-cost=${cCost} lookups  ratio=${ratio.toFixed(2)}`;
+        }
+
+        // Persist per-pathway metrics (best-effort).
+        for (const p of ["B", "C"] as Pathway[]) {
+          const m = pathwayMetrics[p];
+          if (!m) continue;
+          void persistPathwayRun({
+            source_label: c.id,
+            pathway: p,
+            triples_count: predictedTriples.length,
+            hyperedges_count: p === "C" ? cEdges.length : bEdges.length,
+            conflicts_count: 0,
+            credibility_score: c.category === "atomicity" ? m.f1 : null,
+            latency_ms: Math.round(performance.now() - t0),
+            bench_scores: {
+              [c.category]: m.f1,
+              participants_covered: m.participantsCovered,
+              explanation_cost: m.cost,
+            },
+            notes: notes || undefined,
+          }).catch(() => { /* swallow — best effort */ });
+        }
+        return {
+          caseId: c.id, category: c.category, name: c.name, language: c.language,
+          score, latencyMs: Math.round(performance.now() - t0),
+          predictedEntities, predictedTriples, notes, pathwayMetrics,
+        };
+      }
       default: {
         // fact_extraction, qa, repair, multilingual → triple + entity F1, averaged
         const tF = scoreTriples(predictedTriples, c.goldTriples);
@@ -114,6 +186,7 @@ async function runCase(c: BenchCase, domain: Domain): Promise<CaseResult> {
       caseId: c.id, category: c.category, name: c.name, language: c.language,
       score, latencyMs, predictedEntities, predictedTriples, notes,
     };
+
   } catch (e: any) {
     return {
       caseId: c.id, category: c.category, name: c.name, language: c.language,
