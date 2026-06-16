@@ -25,8 +25,10 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // ── Per-domain tool allow-list. Anything not in the set is blocked. ──
 const TOOL_ALLOWLIST: Record<"cti" | "clinical", Set<string>> = {
-  cti: new Set(["preprocess", "retrieve", "extract", "kb_validate", "detect_conflicts", "attribute", "finish"]),
-  // Clinical drops `attribute` (no actor attribution on patients) and `retrieve` (no cross-cohort RAG).
+  // PH7: `extract_hyper` is CTI-only (Pathway C — joint n-ary extraction).
+  // Clinical mode never sees it; the hypergraph pathway is scoped to CTI per plan.
+  cti: new Set(["preprocess", "retrieve", "extract", "extract_hyper", "kb_validate", "detect_conflicts", "attribute", "finish"]),
+  // Clinical drops `attribute` (no actor attribution on patients), `retrieve` (no cross-cohort RAG), and `extract_hyper` (CTI-only).
   clinical: new Set(["preprocess", "extract", "kb_validate", "detect_conflicts", "finish"]),
 };
 
