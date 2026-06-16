@@ -51,20 +51,28 @@ export function toPersistedRows(
   opts: { report_id?: string | null; pathway?: Pathway } = {},
 ): PersistedHyperedgeRow[] {
   const pathway: Pathway = opts.pathway ?? "C";
-  return hyperedges.map((h) => ({
-    hyperedge_id: h.id,
-    report_id: opts.report_id ?? null,
-    pathway,
-    relation_type: h.relation_type,
-    node_ids: h.node_ids,
-    roles: h.roles ?? {},
-    qualifiers: h.qualifiers ?? {},
-    source_passage: h.source_passage ?? null,
-    confidence: clamp01(h.confidence ?? 0.5),
-    inferred_participants: h.inferred_participants ?? [],
-    evidence: h.evidence ?? null,
-    domain: "cti",
-  }));
+  return hyperedges.map((h) => {
+    const q = (h.qualifiers ?? {}) as Record<string, unknown>;
+    const roles = (q.roles ?? {}) as Record<string, string>;
+    const inferred = Array.isArray(q.inferred_participants)
+      ? (q.inferred_participants as string[])
+      : [];
+    const evidence = typeof q.evidence === "string" ? (q.evidence as string) : null;
+    return {
+      hyperedge_id: h.id,
+      report_id: opts.report_id ?? null,
+      pathway,
+      relation_type: h.type,
+      node_ids: h.node_ids,
+      roles,
+      qualifiers: q,
+      source_passage: h.source_passage ?? null,
+      confidence: clamp01(h.confidence ?? 0.5),
+      inferred_participants: inferred,
+      evidence,
+      domain: "cti",
+    };
+  });
 }
 
 function clamp01(n: number): number {
@@ -83,12 +91,14 @@ export async function persistHyperedges(
 ): Promise<{ ok: boolean; written: number; error?: string }> {
   if (hyperedges.length === 0) return { ok: true, written: 0 };
   const rows = toPersistedRows(hyperedges, opts);
+  // Cast to satisfy generated Json typing for jsonb columns.
   const { error, count } = await supabase
     .from("kg_hyperedges")
-    .insert(rows, { count: "exact" });
+    .insert(rows as unknown as never, { count: "exact" });
   if (error) return { ok: false, written: 0, error: error.message };
   return { ok: true, written: count ?? rows.length };
 }
+
 
 export async function persistPathwayRun(
   metrics: PathwayRunMetrics,
