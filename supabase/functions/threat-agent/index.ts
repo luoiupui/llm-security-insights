@@ -25,8 +25,10 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // ── Per-domain tool allow-list. Anything not in the set is blocked. ──
 const TOOL_ALLOWLIST: Record<"cti" | "clinical", Set<string>> = {
-  cti: new Set(["preprocess", "retrieve", "extract", "kb_validate", "detect_conflicts", "attribute", "finish"]),
-  // Clinical drops `attribute` (no actor attribution on patients) and `retrieve` (no cross-cohort RAG).
+  // PH7: `extract_hyper` is CTI-only (Pathway C — joint n-ary extraction).
+  // Clinical mode never sees it; the hypergraph pathway is scoped to CTI per plan.
+  cti: new Set(["preprocess", "retrieve", "extract", "extract_hyper", "kb_validate", "detect_conflicts", "attribute", "finish"]),
+  // Clinical drops `attribute` (no actor attribution on patients), `retrieve` (no cross-cohort RAG), and `extract_hyper` (CTI-only).
   clinical: new Set(["preprocess", "extract", "kb_validate", "detect_conflicts", "finish"]),
 };
 
@@ -87,7 +89,16 @@ KG with high credibility.
 TYPICAL PRODUCTIVE ORDER (you may deviate when justified):
   1. preprocess(text)           — clean text, find IOCs/clinical codes
   2. retrieve(text)             — fetch prior KG context (RAG)
-  3. extract(text, rag_context) — Graph-Native CoT extraction
+  3. extract(text, rag_context) — Graph-Native CoT extraction (Pathway B — triples)
+  3'. extract_hyper(text)       — Hyperedge CoT extraction (Pathway C — n-ary events).
+                                  CTI-only. Prefer this when the passage describes
+                                  events with ≥3 joint participants (actor + tool +
+                                  target + region/time), because joint-validity is
+                                  preserved as a single edge instead of being scattered
+                                  across several pairwise triples. KG-Bench Cat 10
+                                  showed Pathway C +18.5pp atomicity on the CTI corpus.
+                                  Safe to call alongside extract() — the two scratchpads
+                                  are independent and downstream tools read extract().
   4. kb_validate(entities,…)    — ground against MITRE/CISA or clinical KB
   5. detect_conflicts(…)        — neuro-symbolic critic
   6. attribute(query,…)         — graph-path attribution
@@ -168,6 +179,31 @@ serve(async (req) => {
             nodes: gn?.nodes?.length ?? ner?.entities?.length ?? 0,
             edges: gn?.edges?.length ?? re?.relations?.length ?? 0,
             causal_links: causality?.causal_links?.length ?? 0,
+          };
+        },
+      }),
+      extract_hyper: tool({
+        description:
+          "PH7 / Pathway C — Hyperedge CoT extraction for CTI. Returns native n-ary hyperedges " +
+          "(actor + tool + target + region/time as ONE edge) instead of pairwise triples. " +
+          "Prefer for passages describing joint events with ≥3 participants. CTI-only.",
+        inputSchema: z.object({ text: z.string() }),
+        execute: async ({ text }) => {
+          const pre = scratch.preprocess as Record<string, unknown> | undefined;
+          const r = await invokeFn("threat-extract-hyper", {
+            text,
+            source_type: pre?.source_type,
+            reliability: pre?.reliability_score,
+          }) as Record<string, unknown>;
+          scratch.hyper = r;
+          const hg = r.hypergraph as { hyperedges?: Array<{ node_ids?: unknown[] }> } | undefined;
+          const edges = hg?.hyperedges ?? [];
+          const arities = edges.map((e) => (e.node_ids?.length ?? 0));
+          const avg = arities.length ? arities.reduce((a, b) => a + b, 0) / arities.length : 0;
+          return {
+            hyperedges: edges.length,
+            avg_arity: +avg.toFixed(2),
+            max_arity: arities.length ? Math.max(...arities) : 0,
           };
         },
       }),
@@ -310,6 +346,8 @@ serve(async (req) => {
           kb_accuracy: (scratch.kbValidation as { accuracy?: number } | undefined)?.accuracy,
           credibility: (scratch.conflicts as { credibility_score?: number } | undefined)?.credibility_score,
           attribution: (scratch.attribution as { attributed_actor?: string } | undefined)?.attributed_actor,
+          // PH7 — surfaced when the agent chose Pathway C
+          hyperedges: (scratch.hyper as { hypergraph?: { hyperedges?: unknown[] } } | undefined)?.hypergraph?.hyperedges?.length ?? 0,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

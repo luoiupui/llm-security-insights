@@ -424,3 +424,58 @@ No existing panels were modified; both are pure additions. 97/97 project tests p
 
 ### 10.5 Ready for PH7 (conditional)
 PH7 (agent harness wiring) was made conditional on PH5 showing measurable C wins. The corpus comparison panel is the gate: once the first run-batch is persisted from KG-Bench Cat 10/11, the verdict cards will say whether PH7 is worth doing.
+
+---
+
+## 11. PH7 — Agent Harness Wiring (Pathway A ⇆ Pathway C)
+
+### 11.1 Gate condition: cleared
+The PH6 corpus comparison was a hard gate on PH7. From the first paired run-batch (4 CTI cases — `cti-atom-1`, `cti-atom-2`, `cti-exp-1`, `cti-exp-2`):
+
+| Metric (Cat) | Pathway B | Pathway C | Δ | Hypothesis | Verdict |
+|---|---|---|---|---|---|
+| Atomicity (10) | 46.5% | **65.0%** | **+18.5pp** | C − B ≥ 0.10 | **MET** |
+| Explanation cost (11) | 0.75 lookups | 0.75 lookups | 0 | C ≤ B / 3 | tie (not yet met) |
+
+Atomicity alone justifies the wiring: when a passage describes a joint n-ary event, Pathway C preserves the participant set materially better than the post-hoc subject-clustering best-case of Pathway B. The cost metric is a tie on these short single-event passages — Pathway B's pseudo-reassembly happens to cover the answer in 1–2 lookups too. PH7 logs a follow-up: extend the explanation-cost gold set with multi-event passages where B must visit ≥ 3 subjects (the regime where the C ≤ B/3 hypothesis actually has room to be falsifiable).
+
+### 11.2 What PH7 ships
+File: `supabase/functions/threat-agent/index.ts` (Pathway A — the AI-SDK agent loop). Strictly additive — no existing tool, prompt clause, or scratch field was modified.
+
+1. **New tool `extract_hyper`** (CTI-only):
+   - `description`: surfaces the PH6 measurement ("+18.5pp atomicity") so the model has a numeric reason to reach for it, not just stylistic guidance.
+   - `inputSchema`: `{ text: string }` — minimal; no mode flag, no domain (CTI is enforced by the allow-list).
+   - `execute`: calls the `threat-extract-hyper` edge function with the preprocessor's `source_type` / `reliability` (read from `scratch.preprocess` exactly like `extract`), then writes the full result to `scratch.hyper` and returns a compact `{ hyperedges, avg_arity, max_arity }` triple so the loop reasons over counts, not blobs.
+
+2. **Allow-list update**: `extract_hyper` is added to CTI; Clinical's allow-list is unchanged. The guarded-tool wrapper rejects calls in Clinical with a `monitoring_events` row (`event_type = "agent_tool_denied"`).
+
+3. **System-prompt addendum** (line 3'): the prompt now explicitly names Pathway C, when to prefer it (≥ 3 joint participants), why (Cat 10 number), and a non-obvious correctness note — calling `extract_hyper` does **not** replace `extract`. The two write to independent scratch keys (`scratch.hyper` vs `scratch.extract`) so downstream tools (`kb_validate`, `detect_conflicts`, `attribute`) continue to read `scratch.extract` unchanged. This keeps the existing tool contracts intact and lets the agent fan out to both extractors on the same passage without coupling them.
+
+4. **Trace exposure**: the returned `scratch` summary now carries `hyperedges: N` so the `AgentLoopPanel` (and any external trace inspector) can see at a glance whether the agent invoked Pathway C on this run.
+
+### 11.3 What PH7 deliberately does not do
+- **No automatic dual-pathway invocation.** The agent picks. Forcing both on every run would double LLM cost (Risk #4 in the plan) without a measured benefit yet.
+- **No conflict-rule dispatch from the agent.** `detect_conflicts` still runs in triples mode against `scratch.extract`. Wiring R14–R16 into the agent would require a `detect_conflicts_hyper` tool; deferred until the explanation-cost hypothesis is testable on the extended corpus.
+- **No `persist_hyper` tool.** Hyperedges are persisted from the deterministic `HypergraphPathwayPanel` (PH6 §10.1) where the user clicks "Persist run". The agent has no DB-write hyperedge path on purpose — same blast-radius reasoning that gates `persist`.
+- **No clinical adaptation.** PH7 honours the four-place CTI lock established in §10 (extractor, persistence schema CHECK, UI guard, and now the agent allow-list).
+
+### 11.4 A/B history is preserved — runs accumulate, they do not overwrite
+
+A note on how the comparison view evolves as further A/B sessions are run (which the PH7 follow-up will trigger):
+
+- Every paired run writes **two new rows** to `kg_pathway_runs` (one per pathway), each timestamped via `created_at`. Nothing is deleted, no row is updated in place.
+- The `PathwayComparisonPanel` query orders by `created_at desc` and pairs by `source_label`, taking the **most recent** B and C per label. This means a fresh A/B replaces the *displayed* verdict for that label, while every previous run remains queryable as a historical record (`select * from kg_pathway_runs where source_label = $1 order by created_at`).
+- The 4-case run that cleared the PH7 gate is therefore the **first batch of history**, not a destructible draft. Future runs append; the lineage of every verdict is reconstructable.
+- Operational consequence: re-running KG-Bench Cat 10/11 after a prompt or schema change does not erase the prior measurement. The persisted corpus is an append-only ledger of pathway behaviour over time, which is exactly the shape needed to detect regression (e.g. an extractor prompt edit that quietly tanks atomicity will leave both the old high-atomicity rows and the new low-atomicity rows in the same table, in temporal order).
+- The `kg_hyperedges` table behaves the same way — new hyperedges from a fresh A/B are inserted, not merged into prior rows. Each run is recoverable by its `created_at` window.
+
+If at some future point the panel needs a "compare to first-batch baseline" view (instead of "most recent paired"), the data is already there — only the query changes, never the schema.
+
+### 11.5 Verification
+- `threat-agent` redeployed with the new tool.
+- The agent-loop UI (`AgentLoopPanel` at `/kg-construction`) now surfaces `hyperedges: N` in its scratch panel whenever the model elects to call `extract_hyper`.
+- No regression in existing trace fields — `extract_nodes`, `kb_accuracy`, `credibility`, `attribution` are unchanged.
+- Clinical mode regression-tested via the allow-list: an invocation of `extract_hyper` from Clinical produces a denied-tool monitoring event and never reaches `threat-extract-hyper`.
+
+### 11.6 Completion status
+PH1 ✅ → PH2 ✅ → PH3 ✅ → PH4 ✅ → PH5 ✅ → PH6 ✅ → **PH7 ✅** (with a documented follow-up for the explanation-cost corpus extension).
