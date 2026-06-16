@@ -218,6 +218,8 @@ serve(async (req) => {
         warnings: conflicts.filter(c => c.status === "warn").length,
         failures: conflicts.filter(c => c.status === "fail").length,
       },
+      // PH3: Pathway C joint-validity block (R14–R16). null when mode !== "hyperedges".
+      hyperedge_conflicts: hyperedgeBlock,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
