@@ -160,6 +160,27 @@ serve(async (req) => {
           text: z.string(),
           mode: z.enum(["full", "ner", "re", "causality"]).default("full"),
           use_rag: z.boolean().default(true),
+        }),
+        execute: async ({ text, mode, use_rag }) => {
+          const pre = scratch.preprocess as Record<string, unknown> | undefined;
+          const rag = scratch.rag as { context_block?: string } | undefined;
+          const r = await invokeFn("threat-extract", {
+            text, mode, domain,
+            source_type: pre?.source_type,
+            reliability: pre?.reliability_score,
+            rag_context: use_rag ? (rag?.context_block ?? "") : "",
+          }) as Record<string, unknown>;
+          scratch.extract = r;
+          const gn = r.graph_native as { nodes?: unknown[]; edges?: unknown[] } | undefined;
+          const ner = r.ner as { entities?: unknown[] } | undefined;
+          const re = r.re as { relations?: unknown[] } | undefined;
+          const causality = r.causality as { causal_links?: unknown[] } | undefined;
+          return {
+            nodes: gn?.nodes?.length ?? ner?.entities?.length ?? 0,
+            edges: gn?.edges?.length ?? re?.relations?.length ?? 0,
+            causal_links: causality?.causal_links?.length ?? 0,
+          };
+        },
       }),
       extract_hyper: tool({
         description:
@@ -183,27 +204,6 @@ serve(async (req) => {
             hyperedges: edges.length,
             avg_arity: +avg.toFixed(2),
             max_arity: arities.length ? Math.max(...arities) : 0,
-          };
-        },
-      }),
-        execute: async ({ text, mode, use_rag }) => {
-          const pre = scratch.preprocess as Record<string, unknown> | undefined;
-          const rag = scratch.rag as { context_block?: string } | undefined;
-          const r = await invokeFn("threat-extract", {
-            text, mode, domain,
-            source_type: pre?.source_type,
-            reliability: pre?.reliability_score,
-            rag_context: use_rag ? (rag?.context_block ?? "") : "",
-          }) as Record<string, unknown>;
-          scratch.extract = r;
-          const gn = r.graph_native as { nodes?: unknown[]; edges?: unknown[] } | undefined;
-          const ner = r.ner as { entities?: unknown[] } | undefined;
-          const re = r.re as { relations?: unknown[] } | undefined;
-          const causality = r.causality as { causal_links?: unknown[] } | undefined;
-          return {
-            nodes: gn?.nodes?.length ?? ner?.entities?.length ?? 0,
-            edges: gn?.edges?.length ?? re?.relations?.length ?? 0,
-            causal_links: causality?.causal_links?.length ?? 0,
           };
         },
       }),
