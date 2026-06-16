@@ -285,9 +285,82 @@ const clinicalFusionCases: BenchCase[] = [
   },
 ];
 
+/* ── PH5 / Cat 10 + 11 — Hypergraph Pathway gold (CTI only) ──────────
+ * Cat 10 (atomicity): the LLM must keep all participants of an n-ary
+ * event together. Pathway B is allowed to score 0 if the triple stream
+ * cannot be reassembled — that null result is itself the evidence.
+ * Cat 11 (explanation_cost): for each query we compare the number of
+ * KG lookups needed to answer "why are these participants linked?"
+ * between Pathway B (triple walk) and Pathway C (single hyperedge fetch).
+ */
+const hypergraphPathwayCases: BenchCase[] = [
+  {
+    id: "cti-atom-1",
+    category: "atomicity",
+    name: "APT-29 supply-chain incident (5-way)",
+    text:
+      "On 2025-03-12, APT-29 (linked to SVR) compromised SolarFlare Update Server " +
+      "to deploy SUNBURST against the GovCloud tenant in the EU-West region.",
+    goldEntities: ["APT-29", "SolarFlare Update Server", "SUNBURST", "GovCloud tenant", "EU-West"],
+    goldTriples: [],
+    goldHyperedges: [
+      {
+        type: "event",
+        node_ids: ["APT-29", "SolarFlare Update Server", "SUNBURST", "GovCloud tenant", "EU-West"],
+      },
+    ],
+  },
+  {
+    id: "cti-atom-2",
+    category: "atomicity",
+    name: "FIN7 phishing campaign (4-way)",
+    text:
+      "Throughout Q1 2025, FIN7 ran a spear-phishing campaign delivering Carbanak " +
+      "against US retail finance teams, using lure documents themed around tax filings.",
+    goldEntities: ["FIN7", "Carbanak", "US retail finance", "tax filing lures"],
+    goldTriples: [],
+    goldHyperedges: [
+      {
+        type: "campaign",
+        node_ids: ["FIN7", "Carbanak", "US retail finance", "tax filing lures"],
+      },
+    ],
+  },
+  {
+    id: "cti-exp-1",
+    category: "explanation_cost",
+    name: "Why is APT-29 attributed to SUNBURST event?",
+    text:
+      "On 2025-03-12, APT-29 (linked to SVR) compromised SolarFlare Update Server " +
+      "to deploy SUNBURST against the GovCloud tenant in the EU-West region.",
+    goldEntities: ["APT-29", "SUNBURST"],
+    goldTriples: [],
+    goldExplanation: {
+      question: "Why is APT-29 attributed to the SUNBURST deployment on 2025-03-12?",
+      answer_participants: ["APT-29", "SUNBURST", "SolarFlare Update Server"],
+    },
+  },
+  {
+    id: "cti-exp-2",
+    category: "explanation_cost",
+    name: "Why is FIN7 linked to Carbanak retail campaign?",
+    text:
+      "Throughout Q1 2025, FIN7 ran a spear-phishing campaign delivering Carbanak " +
+      "against US retail finance teams, using lure documents themed around tax filings.",
+    goldEntities: ["FIN7", "Carbanak"],
+    goldTriples: [],
+    goldExplanation: {
+      question: "Why is FIN7 linked to Carbanak's retail campaign?",
+      answer_participants: ["FIN7", "Carbanak", "US retail finance"],
+    },
+  },
+];
+
 // Append fusion cases to each domain (kept as separate arrays for readability)
 ctiCases.push(...fusionCorroborationCases);
 clinicalCases.push(...clinicalFusionCases);
+// Hypergraph pathway cases are CTI-only (per project scope).
+ctiCases.push(...hypergraphPathwayCases);
 
 export function getCorpus(domain: Domain): BenchCase[] {
   return domain === "clinical" ? clinicalCases : ctiCases;
@@ -297,6 +370,7 @@ export const CATEGORIES: TaskCategory[] = [
   "fact_extraction", "ontology_conformance", "serialization",
   "qa", "repair", "hallucination", "multilingual",
   "fusion_corroboration",
+  "atomicity", "explanation_cost",
 ];
 
 export const CATEGORY_LABEL: Record<TaskCategory, string> = {
@@ -308,4 +382,7 @@ export const CATEGORY_LABEL: Record<TaskCategory, string> = {
   hallucination: "Hallucination Ctrl",
   multilingual: "Multilingual",
   fusion_corroboration: "Fusion Corroboration",
+  atomicity: "Atomicity (n-ary)",
+  explanation_cost: "Explanation Cost (B vs C)",
 };
+
