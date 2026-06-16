@@ -73,6 +73,7 @@ Files included: ${ok}${failed ? ` (skipped ${failed} unavailable)` : ""}
 Contents:
 - experiments-academic-report.pdf  Primary academic write-up (8 sections)
 - experiments-academic-report.md   Markdown source of the academic report
+- hypergraph-pathway-technical-report.md  Pathway C living tech report (PH1–PH3, ongoing)
 - technical-report.md / .docx      System architecture & version history
 - white-paper.md / .docx           Formal methodology white paper
 - health-report.md                 Self-monitoring drift detection
