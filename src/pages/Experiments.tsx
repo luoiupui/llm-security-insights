@@ -23,6 +23,7 @@ import { corpusStats } from "@/lib/test-corpus";
 import { useToast } from "@/hooks/use-toast";
 import { ReportDownloads } from "@/components/ReportDownloads";
 import { KGBenchPanel } from "@/components/KGBenchPanel";
+import { PathwayComparisonPanel } from "@/components/PathwayComparisonPanel";
 
 const chartStyle = {
   background: "hsl(220, 18%, 10%)",
