@@ -183,3 +183,108 @@ snapshot produce stable hyperedge ids.
 ---
 
 *Last updated: PH2 ship. Next append: PH3 (joint-validity rules R14–R16).*
+
+---
+
+## 7. PH3 — Joint-Validity Rules R14–R16 (this commit)
+
+### 7.1 What was built
+
+| Artifact | Path | Role |
+|---|---|---|
+| Rule module (client) | `src/lib/conflicts/hyperedge-rules.ts` | Pure functions: `applyR14`, `applyR15`, `applyR16`, `runHyperedgeRules` |
+| Unit tests | `src/lib/conflicts/__tests__/hyperedge-rules.test.ts` | 13 tests, all pass |
+| Edge function wiring | `supabase/functions/threat-conflicts/index.ts` | New `mode: "triples" \| "hyperedges"` param + inline R14–R16 mirror |
+| Response field | `hyperedge_conflicts` on `threat-conflicts` response | `null` when `mode === "triples"`, populated when `"hyperedges"` |
+
+### 7.2 The three rules
+
+| Rule | Type | Status semantics | Detects |
+|---|---|---|---|
+| **R14** Joint Validity | hard `fail` | rejects offending hyperedges | Two hyperedges share a member node but disagree on a structural axis (`occurred_at` / `jurisdiction` / `actor` / `campaign`). The SAME event cannot have happened on two different dates. |
+| **R15** Qualifier Consistency | hard `fail` | rejects offending hyperedges | A single hyperedge carries an array-valued qualifier with > 1 distinct entry. The extractor should have split. |
+| **R16** Provenance Overlap | `warn` (default) → `fail` if ≥50% missing | does NOT auto-reject | A participant in `node_ids` has no token-substring match in `source_passage` AND is not whitelisted by `qualifiers.inferred_participants`. Surface-form variants (`U.S. Treasury` vs `US Treasury`) match by token ratio ≥ 0.5. |
+
+### 7.3 Why R14 cannot be expressed by R1–R13
+
+R1–R13 see one binary edge at a time. Given:
+
+```
+hyperedge h1: {APT29, SUNBURST, Treasury}  occurred_at=2020-03
+hyperedge h2: {APT29, WellMess, Treasury}  occurred_at=2021-07
+```
+
+R1–R13 see four perfectly consistent triples:
+`(APT29, related-to, SUNBURST)`, `(APT29, related-to, Treasury)` from h1,
+`(APT29, related-to, WellMess)`, `(APT29, related-to, Treasury)` from h2.
+No pair contradicts. R14 alone sees the joint claim: *APT29 hit Treasury on
+two distinct dates within two distinct atomic events* — which is fine if
+the two events are genuinely separate, but if these hyperedges actually
+attest the same incident the date conflict surfaces immediately.
+
+This is the **"Brittleness of Distribution"** point from the hypergraph
+note §4 made testable.
+
+### 7.4 Dispatch contract
+
+`threat-conflicts` is now dual-mode without breaking existing callers:
+
+```ts
+// Triple mode (Pathway B, unchanged default)
+POST /functions/v1/threat-conflicts
+{ entities, relations, causal_links, domain: "cti" }
+// Response: { conflicts: [...R1–R13], summary, hyperedge_conflicts: null }
+
+// Hyperedge mode (Pathway C, PH3)
+POST /functions/v1/threat-conflicts
+{ entities, relations, causal_links, hyperedges, mode: "hyperedges", domain: "cti" }
+// Response: { conflicts: [...R1–R13 on derived triples], summary,
+//             hyperedge_conflicts: { conflicts: [R14, R15, R16], summary,
+//                                    rejected_hyperedge_ids: [...] } }
+```
+
+Both modes run R1–R13 on the (derived) triple projection so the existing
+credibility-score formula and conflict UI keep working. The
+`hyperedge_conflicts.rejected_hyperedge_ids` block is the new signal —
+downstream PH4 persistence will skip these rejected hyperedges when
+writing to `kg_hyperedges`.
+
+CTI-only enforcement: the edge function returns HTTP 400 if `mode ==
+"hyperedges"` is called with `domain !== "cti"`.
+
+### 7.5 Code-mirror discipline
+
+The edge function inlines R14–R16 because Deno cannot import from
+`src/`. The `runHyperedgeRulesInline` block at the bottom of
+`supabase/functions/threat-conflicts/index.ts` is a verbatim mirror of
+the canonical `src/lib/conflicts/hyperedge-rules.ts`. Any logic change
+must land in BOTH places; the 13-test suite covers the canonical version
+and is the source of truth.
+
+### 7.6 Test coverage (13 tests, 100% pass)
+
+| Suite | Test |
+|---|---|
+| R14 | passes when no shared-node axis disagreement |
+| R14 | fails on `occurred_at` disagreement across shared actor |
+| R14 | ignores axes absent on one side |
+| R14 | detects `jurisdiction` conflicts |
+| R15 | passes for scalar qualifiers |
+| R15 | fails on array-valued qualifier with > 1 distinct entry |
+| R15 | ignores array qualifiers with identical entries |
+| R16 | passes when every participant attested |
+| R16 | warns on 1-of-3 missing participants |
+| R16 | escalates to `fail` at ≥50% missing |
+| R16 | respects `inferred_participants` whitelist |
+| R16 | matches surface-form variants (`U.S. Treasury` vs `US Treasury`) |
+| aggregate | collects rejected ids from R14/R15 only, NOT R16 warnings |
+
+### 7.7 Known limitations (PH3)
+
+1. **No LLM resolver yet.** R1–R13 trigger `resolveConflictsWithLLM`; R14–R16 do not. PH3 keeps the joint-validity verdict deterministic on purpose — adding an LLM resolver before PH5 measurement would contaminate the A/B.
+2. **No persistence side-effect.** `rejected_hyperedge_ids` is surfaced in the response but no hyperedge is actually dropped because there is no `kg_hyperedges` table yet (lands in PH4).
+3. **Axis list is fixed.** `occurred_at | jurisdiction | actor | campaign`. Extending requires editing both the client and inline copies — a deliberate cost to keep the rule cheap and auditable.
+
+---
+
+*Last updated: PH3 ship. Next append: PH4 (`kg_hyperedges` + `kg_pathway_runs` persistence).*
