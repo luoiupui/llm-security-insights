@@ -89,7 +89,16 @@ KG with high credibility.
 TYPICAL PRODUCTIVE ORDER (you may deviate when justified):
   1. preprocess(text)           — clean text, find IOCs/clinical codes
   2. retrieve(text)             — fetch prior KG context (RAG)
-  3. extract(text, rag_context) — Graph-Native CoT extraction
+  3. extract(text, rag_context) — Graph-Native CoT extraction (Pathway B — triples)
+  3'. extract_hyper(text)       — Hyperedge CoT extraction (Pathway C — n-ary events).
+                                  CTI-only. Prefer this when the passage describes
+                                  events with ≥3 joint participants (actor + tool +
+                                  target + region/time), because joint-validity is
+                                  preserved as a single edge instead of being scattered
+                                  across several pairwise triples. KG-Bench Cat 10
+                                  showed Pathway C +18.5pp atomicity on the CTI corpus.
+                                  Safe to call alongside extract() — the two scratchpads
+                                  are independent and downstream tools read extract().
   4. kb_validate(entities,…)    — ground against MITRE/CISA or clinical KB
   5. detect_conflicts(…)        — neuro-symbolic critic
   6. attribute(query,…)         — graph-path attribution
