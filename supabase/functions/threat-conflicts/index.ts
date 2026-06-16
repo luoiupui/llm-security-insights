@@ -67,7 +67,28 @@ serve(async (req) => {
       source_reliability = 0.8,
       graph_native,
       domain = "cti",
+      mode = "triples",        // "triples" | "hyperedges"  (PH3, Pathway C)
+      hyperedges = [],          // only used when mode === "hyperedges"
     } = await req.json();
+
+    // ── Pathway C dispatch (PH3): hyperedge-native joint-validity rules ──
+    // Runs IN ADDITION to the standard triple-mode rules below, so the
+    // caller still gets R1–R13 on the derived triple projection. CTI only.
+    let hyperedgeBlock: {
+      conflicts: Array<{ rule: string; status: string; type: string; detail: string; affected_items: string[] }>;
+      summary: { total_rules: number; passed: number; warnings: number; failures: number };
+      rejected_hyperedge_ids: string[];
+    } | null = null;
+    if (mode === "hyperedges" && Array.isArray(hyperedges) && hyperedges.length > 0) {
+      if (domain !== "cti") {
+        return new Response(
+          JSON.stringify({ error: "hyperedge mode is CTI-only in PH3" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      hyperedgeBlock = runHyperedgeRulesInline(hyperedges);
+    }
+
 
     // Clinical mode: run only domain-agnostic structural checks; skip MITRE-specific TTP rules.
     if (domain === "clinical") {
@@ -197,6 +218,8 @@ serve(async (req) => {
         warnings: conflicts.filter(c => c.status === "warn").length,
         failures: conflicts.filter(c => c.status === "fail").length,
       },
+      // PH3: Pathway C joint-validity block (R14–R16). null when mode !== "hyperedges".
+      hyperedge_conflicts: hyperedgeBlock,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -549,4 +572,120 @@ function applyR13(entities: any[]): ConflictResult {
     affected_items: conflicts.map(e => e.name),
     rule_id: "R13", flag: "modality_conflict", dual_confidence: dual,
   } as any;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * PH3 — Hyperedge conflict rules R14–R16 (Pathway C)
+ * Mirror of src/lib/conflicts/hyperedge-rules.ts. Kept inline because Deno
+ * edge functions cannot import from src/. Any logic change MUST be made in
+ * BOTH places — covered by src/lib/conflicts/__tests__/hyperedge-rules.test.ts.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+interface HE {
+  id: string;
+  type: string;
+  node_ids: string[];
+  source_passage: string;
+  confidence: number;
+  qualifiers?: Record<string, unknown>;
+}
+const STRUCTURAL_AXES = ["occurred_at", "jurisdiction", "actor", "campaign"] as const;
+function _normName(s: string): string {
+  return s.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+function _r14(hes: HE[]) {
+  const byNode = new Map<string, HE[]>();
+  for (const h of hes) for (const n of h.node_ids) {
+    const k = n.toLowerCase(); const a = byNode.get(k) ?? []; a.push(h); byNode.set(k, a);
+  }
+  const conflicts: Array<{ axis: string; node: string; ids: string[]; values: string[] }> = [];
+  for (const [node, group] of byNode) {
+    if (group.length < 2) continue;
+    for (const axis of STRUCTURAL_AXES) {
+      const vals = new Map<string, string[]>();
+      for (const h of group) {
+        const raw = (h.qualifiers ?? {})[axis];
+        if (raw == null) continue;
+        const v = String(raw).trim().toLowerCase();
+        const ids = vals.get(v) ?? []; ids.push(h.id); vals.set(v, ids);
+      }
+      if (vals.size >= 2) conflicts.push({ axis, node, ids: group.map(g => g.id), values: Array.from(vals.keys()) });
+    }
+  }
+  if (conflicts.length === 0) {
+    return { rule: "R14", status: "pass", type: "joint_validity", detail: `${hes.length} hyperedge(s) checked; no joint-validity conflicts`, affected_items: [] };
+  }
+  return {
+    rule: "R14", status: "fail", type: "joint_validity",
+    detail: `${conflicts.length} joint-validity conflict(s): ${conflicts.map(c => `${c.node} disagrees on ${c.axis} (${c.values.join(" vs ")})`).join("; ")}`,
+    affected_items: Array.from(new Set(conflicts.flatMap(c => c.ids))),
+  };
+}
+function _r15(hes: HE[]) {
+  const offenders: Array<{ id: string; key: string; values: string[] }> = [];
+  for (const h of hes) for (const [k, v] of Object.entries(h.qualifiers ?? {})) {
+    if (!Array.isArray(v)) continue;
+    const distinct = Array.from(new Set(v.map(x => String(x).trim().toLowerCase()))).filter(Boolean);
+    if (distinct.length > 1) offenders.push({ id: h.id, key: k, values: distinct });
+  }
+  if (offenders.length === 0) {
+    return { rule: "R15", status: "pass", type: "qualifier_consistency", detail: `${hes.length} hyperedge(s) checked; qualifiers are key-unique`, affected_items: [] };
+  }
+  return {
+    rule: "R15", status: "fail", type: "qualifier_consistency",
+    detail: `${offenders.length} hyperedge(s) carry multi-valued qualifiers (should split): ${offenders.map(o => `${o.id}.${o.key}=[${o.values.join(",")}]`).join("; ")}`,
+    affected_items: offenders.map(o => o.id),
+  };
+}
+function _r16(hes: HE[]) {
+  const offenders: Array<{ id: string; missing: string[] }> = [];
+  for (const h of hes) {
+    const passage = _normName(h.source_passage);
+    const inferred = new Set<string>(
+      Array.isArray((h.qualifiers ?? {}).inferred_participants)
+        ? ((h.qualifiers ?? {}).inferred_participants as unknown[]).map(x => _normName(String(x)))
+        : [],
+    );
+    const missing: string[] = [];
+    for (const node of h.node_ids) {
+      const n = _normName(node); if (!n) continue;
+      if (inferred.has(n)) continue;
+      const tokens = n.split(" ").filter(t => t.length >= 3);
+      const hits = tokens.filter(t => passage.includes(t)).length;
+      const ratio = tokens.length === 0 ? 0 : hits / tokens.length;
+      if (ratio < 0.5) missing.push(node);
+    }
+    if (missing.length > 0) offenders.push({ id: h.id, missing });
+  }
+  if (offenders.length === 0) {
+    return { rule: "R16", status: "pass", type: "provenance_overlap", detail: `${hes.length} hyperedge(s) checked; all participants attested in source_passage`, affected_items: [] };
+  }
+  const hardFail = offenders.some(o => {
+    const h = hes.find(x => x.id === o.id)!;
+    return o.missing.length / h.node_ids.length >= 0.5;
+  });
+  return {
+    rule: "R16", status: hardFail ? "fail" : "warn", type: "provenance_overlap",
+    detail: `${offenders.length} hyperedge(s) have participants missing from source_passage: ${offenders.map(o => `${o.id}=[${o.missing.join(",")}]`).join("; ")}`,
+    affected_items: offenders.map(o => o.id),
+  };
+}
+function runHyperedgeRulesInline(hes: HE[]) {
+  const conflicts = [_r14(hes), _r15(hes), _r16(hes)];
+  const rejected = new Set<string>();
+  for (const c of conflicts) {
+    if (c.status === "fail" && (c.rule === "R14" || c.rule === "R15")) {
+      c.affected_items.forEach((id: string) => rejected.add(id));
+    }
+  }
+  return {
+    conflicts,
+    summary: {
+      total_rules: conflicts.length,
+      passed: conflicts.filter(c => c.status === "pass").length,
+      warnings: conflicts.filter(c => c.status === "warn").length,
+      failures: conflicts.filter(c => c.status === "fail").length,
+    },
+    rejected_hyperedge_ids: Array.from(rejected),
+  };
 }
