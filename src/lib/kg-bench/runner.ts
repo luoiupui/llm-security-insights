@@ -5,11 +5,20 @@
  * we evaluate the full Preprocess → Extract → Validate → Conflicts pipeline.
  */
 
-import { preprocessText, extractThreats, validateAgainstKB, detectConflicts } from "@/lib/threat-pipeline";
+import { preprocessText, extractThreats, extractHyperedges, validateAgainstKB, detectConflicts } from "@/lib/threat-pipeline";
 import { scoreTriples, scoreEntityList, scoreOntologyConformance, scoreTurtleRoundtrip, scoreCorroborations, type Triple, type ScoreResult } from "./scorers";
 import { getCorpus, type BenchCase, type TaskCategory, CATEGORIES, GOLD_VERSION } from "./corpus";
 import { getOntology } from "@/lib/ontology";
+import { persistPathwayRun, type Pathway } from "@/lib/hyperedge-persistence";
 import type { Domain } from "@/contexts/DomainContext";
+
+/** PH5 — per-pathway metrics carried alongside a CaseResult. */
+export interface PathwayMetric {
+  f1: number;          // category-specific quality score (atomicity Jaccard / explanation cost ratio)
+  cost: number;        // # KG lookups to explain (Cat 11) — 0 elsewhere
+  participantsCovered: number;  // Cat 10 — best single-edge coverage
+  notes?: string;
+}
 
 export interface CaseResult {
   caseId: string;
@@ -20,6 +29,8 @@ export interface CaseResult {
   latencyMs: number;
   predictedEntities: string[];
   predictedTriples: Triple[];
+  /** PH5 — populated for `atomicity` and `explanation_cost` cases. */
+  pathwayMetrics?: Partial<Record<Pathway, PathwayMetric>>;
   notes?: string;
   error?: string;
 }
@@ -34,6 +45,7 @@ export interface BenchRun {
   benchScore: number; // macro F1 across categories with data
   comparisonF1?: number; // vanilla LLM baseline (optional)
 }
+
 
 async function runCase(c: BenchCase, domain: Domain): Promise<CaseResult> {
   const t0 = performance.now();
