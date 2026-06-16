@@ -288,3 +288,50 @@ and is the source of truth.
 ---
 
 *Last updated: PH3 ship. Next append: PH4 (`kg_hyperedges` + `kg_pathway_runs` persistence).*
+
+---
+
+## 8. PH4 — Persistence & Pathway-Aware Query (delivered 2026-06-16)
+
+### 8.1 Schema additions
+Two new tables back the parallel pathway, both in `public` with public-read RLS (mirrors `kg_entities` / `kg_relations`); writes are restricted to `service_role` (edge functions) and authenticated experiment runners.
+
+**`public.kg_hyperedges`** — one row per native hyperedge emitted by `threat-extract-hyper`.
+| column | type | note |
+| --- | --- | --- |
+| `hyperedge_id` | text | extractor-assigned id, unique per `report_id` |
+| `report_id` | uuid → `threat_reports.id` | nullable for stand-alone runs |
+| `pathway` | text CHECK in (`B`,`C`) | `C` by default; `B` reserved for `reassembleFromTriples` |
+| `relation_type` | text | maps from `HyperedgeRecord.type` (`event` \| `campaign` \| `fusion-finding` \| `kill-chain`) |
+| `node_ids` | text[] | participants (≥ 2) |
+| `roles`, `qualifiers` | jsonb | as emitted; `qualifiers.evidence` and `qualifiers.inferred_participants` lifted into typed columns |
+| `source_passage` | text | ≤ 240 chars per PH2 contract |
+| `confidence` | numeric(4,3) CHECK 0–1 | enforced at DB level |
+| `domain` | text CHECK = `cti` | hard-coded scope |
+
+**`public.kg_pathway_runs`** — one row per (source, pathway) pair, populated by PH5's runner.
+Fields: `source_label`, `pathway`, `triples_count`, `hyperedges_count`, `conflicts_count`, `credibility_score`, `latency_ms`, `bench_scores` (jsonb), `notes`.
+
+Indexes on `(report_id)`, `(pathway)`, `(relation_type)` for `kg_hyperedges`; `(source_label)`, `(pathway)` for `kg_pathway_runs`.
+
+### 8.2 Client persistence module
+`src/lib/hyperedge-persistence.ts` is the single source of truth for row shape:
+- `toPersistedRows(hyperedges, { report_id, pathway })` — normalizes the in-memory `HyperedgeRecord` to the DB row, lifting `qualifiers.roles`, `qualifiers.inferred_participants`, `qualifiers.evidence` into typed columns while preserving the full `qualifiers` blob.
+- `persistHyperedges(...)` — best-effort insert; failure is non-fatal (the live A/B panel doesn't depend on DB round-trip).
+- `persistPathwayRun(metrics)` / `fetchPathwayRuns(source_label?)` — used by PH5 runner and PH6 comparison panel.
+
+### 8.3 Pathway-aware query in `threat-kg-query`
+The edge function now accepts:
+- `hyperedges?: HyperedgeRecord[]`
+- `pathway?: "B" | "C" | "both"` (default `"B"` preserves prior behaviour)
+
+When `pathway === "C"`, hyperedges are projected to a traversable graph via `projectHyperedges`: each n-ary hyperedge expands into ordered participant pairs tagged with `edge_type: "hyperedge_projection"` and the parent `hyperedge_id` for evidence reassembly. Existing path-walking prompts keep working unchanged. `pathway === "both"` merges the two views (de-duplicating nodes by canonical name) so the attribution prompt sees the full evidence superset.
+
+### 8.4 What PH4 deliberately does not do
+- No dual-write from the production extract pipeline — PH4 is a *capability* layer; the dashboard and KG-Bench runner decide when to persist.
+- No anon-write policy — the comparison panel writes only when authenticated against an experiment session.
+- No edits to `kg_entities` / `kg_relations` — Pathway B persistence is untouched.
+- No clinical branch — `domain` is CHECK-constrained to `cti`.
+
+### 8.5 Ready for PH5
+The contract surface for KG-Bench Cat 10 (atomicity) and Cat 11 (explanation cost) is now stable: the runner reads/writes `kg_pathway_runs` and joins back to `kg_hyperedges` for per-edge inspection. PH5 implementation is unblocked.
