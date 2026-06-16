@@ -39,7 +39,7 @@ describe("scoreCorroborations", () => {
 
 describe("KG-Bench Phase 3 wiring", () => {
   it("exports GOLD_VERSION v2", () => {
-    expect(GOLD_VERSION).toBe("v2");
+    expect(GOLD_VERSION).toBe("v3");
   });
   it("registers fusion_corroboration category", () => {
     expect(CATEGORIES).toContain("fusion_corroboration");
