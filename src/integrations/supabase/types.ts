@@ -201,6 +201,118 @@ export type Database = {
           },
         ]
       }
+      kg_hyperedges: {
+        Row: {
+          confidence: number
+          created_at: string
+          domain: string
+          evidence: string | null
+          hyperedge_id: string
+          id: string
+          inferred_participants: string[]
+          node_ids: string[]
+          pathway: string
+          qualifiers: Json
+          relation_type: string
+          report_id: string | null
+          roles: Json
+          source_passage: string | null
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          domain?: string
+          evidence?: string | null
+          hyperedge_id: string
+          id?: string
+          inferred_participants?: string[]
+          node_ids: string[]
+          pathway?: string
+          qualifiers?: Json
+          relation_type: string
+          report_id?: string | null
+          roles?: Json
+          source_passage?: string | null
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          domain?: string
+          evidence?: string | null
+          hyperedge_id?: string
+          id?: string
+          inferred_participants?: string[]
+          node_ids?: string[]
+          pathway?: string
+          qualifiers?: Json
+          relation_type?: string
+          report_id?: string | null
+          roles?: Json
+          source_passage?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kg_hyperedges_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "threat_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kg_pathway_runs: {
+        Row: {
+          bench_scores: Json
+          conflicts_count: number
+          created_at: string
+          credibility_score: number | null
+          hyperedges_count: number
+          id: string
+          latency_ms: number | null
+          notes: string | null
+          pathway: string
+          report_id: string | null
+          source_label: string
+          triples_count: number
+        }
+        Insert: {
+          bench_scores?: Json
+          conflicts_count?: number
+          created_at?: string
+          credibility_score?: number | null
+          hyperedges_count?: number
+          id?: string
+          latency_ms?: number | null
+          notes?: string | null
+          pathway: string
+          report_id?: string | null
+          source_label: string
+          triples_count?: number
+        }
+        Update: {
+          bench_scores?: Json
+          conflicts_count?: number
+          created_at?: string
+          credibility_score?: number | null
+          hyperedges_count?: number
+          id?: string
+          latency_ms?: number | null
+          notes?: string | null
+          pathway?: string
+          report_id?: string | null
+          source_label?: string
+          triples_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kg_pathway_runs_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "threat_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kg_relations: {
         Row: {
           confidence: number | null

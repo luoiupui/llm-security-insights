@@ -80,15 +80,18 @@ serve(async (req) => {
       relations = [],
       causal_links = [],
       graph_native,  // our enhanced graph structure if available
-      mode = "attribute"
+      hyperedges = [],          // PH4: Pathway C native hyperedges (optional)
+      pathway = "B",            // "B" = triples (default), "C" = hyperedges, "both" = run both then merge
+      mode = "attribute",
     } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Use graph_native data if available (from our enhanced extraction), 
-    // otherwise fall back to flat entities/relations
-    const graphData = graph_native || {
+    // Build graph view per pathway. Pathway C projects hyperedges into edges
+    // by emitting one edge per ordered pair of participants per hyperedge,
+    // tagged with the parent hyperedge id so downstream paths remain traceable.
+    const triplesGraph = graph_native || {
       nodes: entities,
       edges: [...relations, ...causal_links.map((cl: any) => ({
         source: cl.cause,
@@ -99,6 +102,12 @@ serve(async (req) => {
       }))],
       subgraphs: [],
     };
+    const hyperedgesGraph = projectHyperedges(entities, hyperedges);
+    const graphData =
+      pathway === "C" ? hyperedgesGraph
+      : pathway === "both" ? mergeGraphs(triplesGraph, hyperedgesGraph)
+      : triplesGraph;
+
 
     let result: unknown;
 
@@ -325,4 +334,51 @@ Base predictions on GRAPH STRUCTURE, not text.`,
 
   const data = await response.json();
   return { predictions: data.choices?.[0]?.message?.content || "" };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PH4 — Pathway C helpers: project hyperedges to a traversable graph
+// ════════════════════════════════════════════════════════════════════
+function projectHyperedges(entities: any[], hyperedges: any[]) {
+  const nodes = entities ?? [];
+  const edges: any[] = [];
+  for (const h of hyperedges ?? []) {
+    const ids: string[] = Array.isArray(h?.node_ids) ? h.node_ids : [];
+    if (ids.length < 2) continue;
+    // For an n-ary hyperedge, emit ordered pair edges so existing
+    // path-walking prompts keep working, while preserving the parent
+    // hyperedge id for evidence reassembly.
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        edges.push({
+          source: ids[i],
+          target: ids[j],
+          relation: h?.type ?? "joint_event",
+          confidence: typeof h?.confidence === "number" ? h.confidence : 0.5,
+          edge_type: "hyperedge_projection",
+          hyperedge_id: h?.id ?? null,
+          source_passage: h?.source_passage ?? null,
+        });
+      }
+    }
+  }
+  return { nodes, edges, subgraphs: [], pathway: "C" };
+}
+
+function mergeGraphs(a: any, b: any) {
+  const nodeKey = (n: any) => n?.canonical_name ?? n?.name ?? n?.id ?? JSON.stringify(n);
+  const seen = new Set<string>();
+  const nodes: any[] = [];
+  for (const n of [...(a?.nodes ?? []), ...(b?.nodes ?? [])]) {
+    const k = nodeKey(n);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    nodes.push(n);
+  }
+  return {
+    nodes,
+    edges: [...(a?.edges ?? []), ...(b?.edges ?? [])],
+    subgraphs: [...(a?.subgraphs ?? []), ...(b?.subgraphs ?? [])],
+    pathway: "both",
+  };
 }
