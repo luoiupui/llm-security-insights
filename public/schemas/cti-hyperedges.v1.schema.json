@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://threatgraph.lovable.app/schemas/cti-hyperedges.v1.schema.json",
+  "title": "CTI Hyperedges v1",
+  "description": "N-ary atomic claims sitting above the STIX 2.1 triple store. One hyperedge = one event = one provenance quote. See src/lib/ontology/hypergraph.ts and .lovable/plan.md (Phase H1).",
+  "type": "object",
+  "required": ["version", "hyperedges"],
+  "properties": {
+    "version": { "const": "1.0.0" },
+    "hyperedges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/hyperedge" }
+    }
+  },
+  "$defs": {
+    "hyperedge": {
+      "type": "object",
+      "required": ["id", "type", "node_ids", "source_passage", "confidence", "qualifiers"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["event", "campaign", "fusion-finding", "kill-chain"]
+        },
+        "node_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "source_passage": { "type": "string", "minLength": 1 },
+        "evidence_span": {
+          "type": "object",
+          "required": ["start", "end"],
+          "properties": {
+            "doc_id": { "type": "string" },
+            "start": { "type": "integer", "minimum": 0 },
+            "end": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "qualifiers": { "type": "object" }
+      }
+    }
+  }
+}

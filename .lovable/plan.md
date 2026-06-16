@@ -1,153 +1,71 @@
-# Flow-Feature Ingest Spec + Pure Fusion Foundations
+# Hypergraph Augmentation — Feasibility & Plan
 
-Combined low-risk plan covering Option 4 (spec) and Option 1 (pure code + fixtures). Zero impact on future Option 2 (schema migration) or Option 3 (pipeline + KG-Bench): no DB changes, no edge functions, no changes to existing pipeline stages, no KG-Bench gold-version bump. Everything added is additive and behind no runtime call path.
+## TL;DR
+**Don't replace, augment.** A full swap from STIX 2.1 triples → hypergraph breaks the entire downstream stack (KG-Bench scorers, conflict rules R1–R13, MITRE/CVE grounding, persistence schema, UI graph view, edge functions). Instead, introduce a **hyperedge layer that sits *above* the existing triple store** as the atomic "event" unit, while triples remain the lookup / scoring substrate. This preserves all current validation evidence (the 2.1% false-entity result from §10.2) and adds native event-centric explainability on top.
 
----
+## Feasibility Verdict per Subsystem
 
-## Part A — Flow-Feature Ingest Spec (Option 4, peer of heart-sound T2)
+| Subsystem | Replace? | Augment? | Why |
+|---|---|---|---|
+| `threat-extract` 8-step CoT | No | **Yes** — add Step 4.5 "hyperedge grouping" | Schema is already nested JSON; add `hyperedges[]` field alongside `entities/relations/causal_links` |
+| STIX 2.1 ontology (`cti.ts`) | No | Keep | External interop (MISP, OpenCTI consumers) assumes triples |
+| `kb-validate` (MITRE/CVE grounding) | No | Unchanged | Per-entity check, hyperedge-agnostic |
+| `threat-conflicts` R1–R13 | No | **Add R14** (hyperedge-level conflict) | Existing rules stay; add joint-validity rule on hyperedges |
+| `kg_corroborated_findings` table | No | **Add `kg_hyperedges` table** | New table referencing existing entity IDs via array |
+| KG-Bench scorers | No | **Add Cat 10: Hyperedge Atomicity** | Score whether decomposed triples reassemble into the gold hyperedge |
+| `MultiModalFusionMock` / Attribution UI | Partial | Add "Event View" toggle | Render hyperedges as bordered cards grouping their triples |
+| `threat-agent` tools | No | Add `hyperedge_lookup` tool | Single-call provenance retrieval |
 
-**File:** `public/reports/cti-flow-feature-ingest-spec.md` (new)
+## Phased Plan
 
-Mirrors the structure of `clinical-feature-ingest-spec.md` so the two domains stay symmetric.
+### Phase H1 — Foundations (no behavior change)
+- Add `src/lib/ontology/hypergraph.ts`: `Hyperedge { id, type: 'event'|'campaign'|'fusion-finding'|'kill-chain', node_ids: string[], qualifiers: Record<string,unknown>, evidence_span, confidence, source_passage }`
+- JSON schema at `public/schemas/cti-hyperedges.v1.schema.json`
+- Pure functions: `decomposeToTriples(h)`, `reassembleFromTriples(triples)` for backward compat
+- Unit tests covering the SolarWinds sample (1 hyperedge → 7 triples → round-trip)
 
-Sections:
-1. **Purpose & scope** — CICIDS-style flow features as a de-identified intermediate for CTI KG. Non-goals: raw pcap handling, inline DPI, online streaming.
-2. **Position in pipeline** — sibling of `threat-preprocess` on the CTI internal-telemetry branch. Emits the same normalized document shape `threat-extract` already consumes, with a machine-readable `features` block and an auto-rendered `text_view` for the LLM. Respects `pipeline-stage-contracts`.
-3. **Tier selection** — three tiers documented, **T2 (flow-aggregate) is v1**:
-   - T1 packet-level (Parquet, out of scope v1)
-   - **T2 flow-aggregate** (per-bidirectional-flow record) ✓ v1
-   - T3 host/window-aggregate (rolling stats, out of scope v1)
-4. **Record schema (T2)** — one JSON object per bidirectional flow:
-   - `record_id`, `schema_version: "1.0"`
-   - `asset_ref` (opaque pseudonym for the internal host, never raw IP), `peer_ref` (opaque or external IP/ASN depending on allow-list)
-   - `flow_meta`: `start_ts`, `end_ts`, `duration_s`, `protocol`, `src_port`, `dst_port`, `direction`, `vlan?`, `sensor_id`
-   - `features` (T2 aggregates, CICIDS-2017-aligned):
-     - Counts: `fwd_packets`, `bwd_packets`, `total_bytes_fwd`, `total_bytes_bwd`
-     - Length stats: `pkt_len_mean/std/max/min`, `fwd_pkt_len_mean/std`, `bwd_pkt_len_mean/std`
-     - Inter-arrival: `iat_mean/std/min/max`, `fwd_iat_mean/std`, `bwd_iat_mean/std`
-     - Rates: `flow_bytes_per_s`, `flow_packets_per_s`
-     - Flags: `syn_count`, `ack_count`, `fin_count`, `rst_count`, `psh_count`, `urg_count`
-     - Window: `init_win_bytes_fwd`, `init_win_bytes_bwd`
-     - Active/idle: `active_mean/std`, `idle_mean/std`
-     - Entropy: `payload_entropy_bits_per_byte`
-     - Fingerprints: `ja3?`, `ja3s?`, `tls_sni?` (sni only if allow-listed)
-   - `derived` (optional): `anomaly_score (0–1)`, `baseline_percentile`, `cluster_id`
-   - `findings` (optional T3-style passthrough): `[{ code_system, code, display, confidence, evidence_refs[] }]` (e.g. `MITRE:T1071.001` candidate)
-   - `provenance`: `producer_model_id`, `producer_version`, `preprocessing_chain[]`, `calibration_id`, `created_at`, `quality_flags[]`
-   - `text_view` (auto-derived natural-language summary for LLM ingest)
-5. **Units & coding** — bytes/packets unit-less, durations in seconds (UCUM `s`), rates in `1/s` and `B/s`; MITRE ATT&CK TIDs for `findings.code` when `code_system = "MITRE"`; project-local codes for engineered features registered as a follow-up in `src/lib/ontology/cti.ts`.
-6. **STIX 2.1 mapping** — record → STIX `network-traffic` SCO + `observed-data` SDO; `findings` map to candidate `sighting`s with the `extension-definition--threatgraph-corroborated-finding-v1` extension introduced in Spec 3. Spec only — no STIX exporter implemented.
-7. **File formats** — JSON for single records, NDJSON for batches; gzip allowed; max 5 MB per record. Parquet for T1, HDF5, raw pcap explicitly out of scope.
-8. **Validation rules** — required-field list, range checks (`duration_s ≥ 0`, `payload_entropy_bits_per_byte ∈ [0, 8]`, `*_pkt_len_* ≥ 0`, monotonic `start_ts < end_ts`), protocol enum (tcp/udp/icmp/other), UCUM conformance for units, presence of all provenance fields. Records failing validation are rejected at ingest with a structured error.
-9. **Internal-asset redaction guard** — `asset_ref` MUST be opaque (regex `^[A-Za-z0-9_-]{6,64}$`); spec forbids raw internal MAC, raw RFC1918 IP, or AD computer name in any field. `peer_ref` is opaque iff peer IP is in the CDN/cloud allow-list (Part B); otherwise raw IP allowed. Mirror of the PHI guard on the Clinical side.
-10. **Mapping to KG triples** — worked example: external report → KG TTP node `T1071.001`; flow record → `FlowPattern f1` node tagged `source_modality=internal_telemetry`; `corroborates(T1071.001 → f1, conf_behavioral=anomaly_score)`; `CorroboratedFinding cf1` materialised per Spec 3.
-11. **KG-Bench Cat 9 hook** — describes gold-case shape for `(external TTP, flow features) → CorroboratedFinding` triples. Notes that authoring those gold cases requires a gold-version bump per the cardinal rule and is **not** in this plan.
-12. **Open extension points (not v1)** — T1 packet-level, T3 host-window aggregates, streaming ingest, encrypted-traffic fingerprint expansion (JARM, SPKI), real CICIDS labels passthrough.
+### Phase H2 — Extractor opt-in
+- Extend `GRAPH_NATIVE_COT_PROMPT` with **Step 4.5: Hyperedge Grouping** — "before emitting causal links, group co-evidenced triples that describe one atomic event into a hyperedge; attach the verbatim source quote"
+- Output schema gains optional `hyperedges[]`; absence = backward compatible
+- Feature flag `VITE_HYPERGRAPH_ENABLED` defaults off; on → UI shows event cards
 
-**Companion artifacts:**
-- `public/schemas/cti-flow-features.v1.schema.json` — JSON Schema Draft 2020-12 with `$id` pointing at the public path so external producers can validate offline. Mirrors `heart-sound-features.v1.schema.json`.
-- `public/schemas/examples/cti-flow-features.example.json` — one synthetic record showing a beaconing-like flow with `anomaly_score=0.74` (matches the mock panel from Spec 4).
+### Phase H3 — Conflict rule R14 (joint validity)
+- `src/lib/conflicts/hyperedge-rules.ts`: a hyperedge is rejected if ≥2 of its member triples individually conflict (date/actor/jurisdiction). Stronger than current per-triple R-rules — exactly the "Brittleness of Distribution" point in the note (§4).
+- 6 unit tests on existing CTI corpus
 
----
+### Phase H4 — Persistence
+- Migration: `kg_hyperedges (id, kg_id, type, node_ids uuid[], qualifiers jsonb, source_passage text, confidence numeric, created_at)` + GRANTs + RLS
+- No FK to entities (array of IDs) to keep migration cheap; integrity enforced in app layer
+- `kg-query` edge function gains `?include=hyperedges` param
 
-## Part B — Pure Fusion Foundations (Option 1, no schema/runtime impact)
+### Phase H5 — KG-Bench Category 10 (the validation)
+This is the **innovation evidence step** mirroring §10.2:
+- Gold set: 10 CTI hyperedges (SolarWinds, NotPetya, FIN7-Carbanak, etc.)
+- Score 3 variants on same Gemini-3-flash backbone:
+  - **Triples-only** (current pipeline)
+  - **Triples + post-hoc grouping** (LLM-as-judge re-clusters)
+  - **Native hyperedge extraction** (Step 4.5 enabled)
+- Metrics: hyperedge precision/recall, provenance-trace cost (# DB lookups), human explanation time
+- Hypothesis under test: native hyperedge mode reduces multi-hop explanation traversal from N triples to 1, and lowers joint-error rate vs. post-hoc grouping
 
-All code is pure (no I/O, no Supabase, no edge functions). Existing modules are not edited. Safe to ship without Option 2 or Option 3.
+### Phase H6 — UI surfacing (minimal)
+- Attribution page: "Event View" toggle (default off). When on, group conflicts/findings into hyperedge cards with source quote at top.
+- No new page, no graph re-layout (HGNN visualization is explicitly out of scope — note §5.2)
 
-### B1. CDN / cloud ASN allow-list
+## Honest Risks (mirroring note §5)
+1. **Extraction reliability** — Gemini may produce malformed hyperedges; mitigated by JSON-schema-constrained decoding + decompose/reassemble round-trip test as a gate.
+2. **Larger-blast-radius errors** — one bad hyperedge = N bad triples. Mitigated by R14 (reject jointly-inconsistent hyperedges) and confidence floor.
+3. **Tooling immaturity** — we deliberately keep triples as the storage primitive; hypergraph is an *index* over them. No Neo4j swap, no HGNN.
+4. **Scope creep** — phases gated by KG-Bench Cat 10 results; if Phase H5 doesn't show measurable explanation-cost reduction, we ship H1–H3 only and document the negative result.
 
-**File:** `src/lib/ontology/cdn-asn-allowlist.json` (new, static)
+## Out of Scope
+- Replacing STIX 2.1
+- Hypergraph neural networks (HGNN)
+- New graph database (Hyper-DB, RDF-star)
+- Clinical-domain hyperedges (deferred to a follow-up)
 
-Seed entries: CloudFront, Akamai, Fastly, Cloudflare, GCP, AWS, Azure (major ASNs and well-known IP ranges). Schema:
-```json
-{
-  "version": "1.0",
-  "updated_at": "2026-06-13",
-  "entries": [
-    { "name": "Cloudflare", "asn": 13335, "kind": "cdn", "ip_ranges": ["1.1.1.0/24", "..."] },
-    ...
-  ]
-}
-```
-
-**File:** `src/lib/ontology/cdn-asn-allowlist.ts` (new) — tiny loader exporting:
-- `getAllowlist()` — typed array
-- `isAllowlistedAsn(asn: number): boolean`
-- `isAllowlistedIp(ip: string): boolean` (CIDR match, IPv4 only in v1)
-- `allowlistVerdict(ip, asn): { indicator_match: boolean; behavioral_match: boolean }` — implements the table from Spec 3 §4
-
-### B2. Pure fusion math module
-
-**File:** `src/lib/fusion/index.ts` (new) — no dependencies beyond TS lib.
-- `noisyOr(a, b): number`
-- `minFusion(a, b): number`
-- `weightedFusion(a, b, alpha = 0.5): number`
-- `fuse(method, a, b, alpha?): number` (dispatcher)
-- `freshness(ageDays, halfLifeDays): number` — `0.5 ** (age/halfLife)` clamped `[0.05, 1.0]`
-- `decayHalfLife(kind: "ip" | "domain" | "hash" | "ttp"): number` — defaults from Spec 2 §1
-- `applyFreshness(conf, ageDays, kind): number`
-
-Strict input clamping: every input clamped to `[0,1]`; NaN → 0.
-
-### B3. Synthetic flow fixture
-
-**File:** `src/lib/test-corpus/flow-samples.ts` (new) — 5 synthetic T2 flow records as TS objects conforming to the new JSON Schema:
-1. Benign HTTPS to CDN (allow-listed peer, high traffic, anomaly 0.05)
-2. SaaS heartbeat (regular 30s intervals, anomaly 0.18)
-3. APT29-style beaconing (60s ± 1.8s intervals, low entropy, anomaly 0.74) — matches the mock panel
-4. DNS exfiltration (high uplink/downlink ratio, anomaly 0.82)
-5. Port scan (many short flows, anomaly 0.91)
-
-Each record carries opaque `asset_ref` and `peer_ref`, valid `provenance`, and an auto-derived `text_view` string. Exported as `SAMPLE_FLOWS: FlowFeatureRecord[]`.
-
-### B4. Unit tests
-
-**File:** `src/lib/fusion/__tests__/fusion.test.ts` (new, vitest)
-- `noisyOr`/`min`/`weighted` produce expected values for known pairs
-- `freshness(0, _)` = 1; `freshness(halfLife, halfLife)` = 0.5; `freshness(10*halfLife, halfLife)` clamped to 0.05
-- Clamping behavior (negative inputs, NaN, >1)
-
-**File:** `src/lib/ontology/__tests__/cdn-asn-allowlist.test.ts` (new, vitest)
-- Known CDN IP resolves to `indicator_match=false, behavioral_match=true`
-- Unknown IP resolves to `indicator_match=true, behavioral_match=true`
-- CIDR membership for at least one Cloudflare and one AWS prefix
-
-**File:** `src/lib/test-corpus/__tests__/flow-samples.test.ts` (new, vitest)
-- Every sample record passes a thin runtime validator (range checks from spec §8) — validator inlined in the test, not yet a shared module
-- Opaque-ref regex holds for `asset_ref` on all samples
-- `text_view` is non-empty for all samples
+## Deliverable Order
+H1 → H2 → H3 → (gate: tests green) → H4 → H5 → H6. Each phase is independently shippable and reversible by the feature flag.
 
 ---
-
-## Memory & docs updates
-
-- New file `docs/memory/features/flow-feature-ingest.md` (type: `feature`) — one paragraph linking the spec, schema, example, allow-list, fusion module, and fixture.
-- Edit `docs/memory/index.md` — add the new entry.
-- Edit `docs/memory/features/multimodal-fusion.md` — append a "Status update (Phase 1 landed)" footnote pointing at the new spec + pure-code modules.
-- Edit `public/reports/manifest.json` — add the new spec file entry (same shape as the existing multimodal entries).
-- Edit `public/reports/cti-multimodal-fusion.md` — add a one-line cross-reference to the new flow-feature spec in §8.
-
----
-
-## Verification
-
-After writes, run `bunx vitest run src/lib/fusion src/lib/ontology src/lib/test-corpus` to confirm the new unit tests pass. No other tests or pipelines are touched.
-
----
-
-## Why this is safe for future Option 2 and Option 3
-
-- **No schema migration** — Option 2 remains a clean, single PR.
-- **No edits to existing edge functions, hooks, ontology types, or pipeline stages** — Option 3 inherits a clean baseline; the cardinal rule on stage-contract changes is not triggered.
-- **No KG-Bench gold-version bump** — Cat 9 gold cases are explicitly deferred to Option 3's PR.
-- **Pure modules + JSON fixtures + spec docs only** — the new code is dead until Option 2/3 wires it in, so any later API adjustment is a local refactor.
-- **Allow-list and fusion math are the *only* things Options 2 and 3 would otherwise re-derive**, so landing them now is strictly de-risking, never blocking.
-
-## Out of scope (intentionally)
-
-- Any DB migration, RLS, or GRANT change.
-- Any edge function (no `flow-ingest`, no `threat-fuse`, no `threat-conflicts` edits).
-- Any change to `src/lib/ontology/cti.ts`, `src/lib/threat-pipeline.ts`, `src/hooks/use-threat-pipeline.ts`, or `AgentLoopPanel.tsx`.
-- KG-Bench gold cases or scorer changes.
-- Wiring the mock panel to the new fixture (it stays static — swapping to live samples is a one-line follow-up).
-- UI work on `/data-ingestion`.
+Proceed with **Phase H1** (foundations + tests, zero behavior change)?
