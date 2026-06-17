@@ -23,6 +23,14 @@ export function DashboardLayout() {
                 SIMULATION — synthetic data only
               </Badge>
             )}
+            <Badge
+              variant="outline"
+              className="text-[10px] font-mono border-amber-500/50 text-amber-400"
+              title="Research/demo posture: kg_hyperedges, kg_pathway_runs, monitoring_events accept anonymous inserts; threat_reports is public-read. No PII, append-only. Tighten via Supabase RLS when graduating to production."
+            >
+              EXPERIMENT — open writes, public reads
+            </Badge>
+
             <div className="ml-auto flex items-center gap-3">
               <LanguageSwitch />
               <div className="flex items-center gap-2">
