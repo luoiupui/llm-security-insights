@@ -148,3 +148,105 @@ Each dimension is scored 0 (absent) to 5 (mature/standardised/regulator-accepted
 - **Do not use it** for binary lookups, telemetry counters, cross-document aggregates, inferred closures, or real PHI.
 - **Versus KG-only SOTA**, the hypergraph trades interop/tooling/scale for joint provenance and n-ary fidelity. KG-only owns the market; hybrid systems own the research frontier.
 - **Maturity today:** KG-only **77 %**, Hypergraph-only **40 %**, Hybrid HG+KG (ThreatGraph) **66 %**. The cheapest path to 75 % is closing the conflict-driven repair cycle and publishing an HG validator.
+
+---
+
+## 5. Techniques That Could Lift ThreatGraph Above 66 %
+
+Two filters apply to every item below:
+- **Not yet used in this project** (no module in `src/lib/` or `supabase/functions/` implements it).
+- **Under-developed in the research field** — either pre-standard, no canonical reference implementation, or no agreed benchmark — so adopting them is a research contribution, not just integration work.
+
+Each entry lists the **dimension(s) it lifts** (D1–D7 from §3.1), the **mechanism**, and the **honest risk** of pulling it in.
+
+### 5.1 Hyper-relational KG embeddings (HINGE / StarE / GRAN / QBLP)
+- **Lifts:** D2 (query/reasoning), D5 (n-ary fidelity).
+- **Mechanism:** Learn embeddings over `(head, relation, tail, {qualifier_k: qualifier_v})` tuples — the data shape `kg_hyperedges` already stores. Enables similarity search, link prediction, and missing-participant completion *without* down-projecting to triples.
+- **Field status:** Active research (2020–2025), no production library on par with PyKEEN-for-triples; reproducibility on hyper-relational benchmarks (JF17K, WikiPeople, WD50K) is uneven.
+- **Risk:** Embedding drift across pipeline runs invalidates KG-Bench comparability — must freeze checkpoints per benchmark run.
+
+### 5.2 Neural-symbolic conflict-repair loop (closes Round 3 of the HG↔LLM↔KG loop)
+- **Lifts:** D6 (validation & blast radius) from 2 → 4.
+- **Mechanism:** Today `threat-conflicts` *flags* violations. Wire an automatic cycle: violation → targeted LLM patch prompt (with the offending hyperedge + rule + minimal RAG context) → re-validate → commit or escalate. Bound by max-N rewrites per hyperedge.
+- **Field status:** Neuro-symbolic repair is a research theme (DeepProbLog, Logical Neural Networks, IBM's NSQA) but no off-the-shelf "graph-repair agent" exists for hyperedges.
+- **Risk:** Non-termination, prompt-cost blow-up — needs hard step caps and ablation against the no-repair baseline.
+
+### 5.3 SHACL-for-hyperedges (HyperSHACL / shape constraints over n-ary facts)
+- **Lifts:** D1 (standards) 3 → 4, D6 (validation) 2 → 4.
+- **Mechanism:** Define shape constraints that talk about participant *roles and cardinalities* inside a hyperedge (`event` MUST have ≥1 actor and ≥1 target; `kill-chain` participants MUST be ordered TTPs). Today the JSON Schema (`public/schemas/cti-hyperedges.v1.schema.json`) only validates structure, not semantic role-cardinality.
+- **Field status:** W3C SHACL is mature for triples; there is no community-blessed shape language for n-ary/hyperedge graphs.
+- **Risk:** Building a bespoke validator is a maintenance liability — keep it small and tie shapes to test cases in `src/lib/ontology/__tests__/`.
+
+### 5.4 Event resolution & coreference across hyperedges (Round 5 of the loop)
+- **Lifts:** D5 (event fidelity, "as-reported" → "as-occurred"), D6.
+- **Mechanism:** Cluster hyperedges from different reports that describe the *same real-world event* — embedding similarity + participant overlap + time-window + actor consistency. Output: a `world_event_id` linking N hyperedges, with conflict surface where they disagree.
+- **Field status:** Cross-document event coreference is open research (ACE, MUC, ECB+ benchmarks for *triples*; almost no work at the hyperedge level).
+- **Risk:** False merges destroy provenance — merge must be *non-destructive* (membership pointer, never edit the source hyperedge).
+
+### 5.5 Calibrated joint-confidence (instead of LLM-self-reported scores)
+- **Lifts:** D4 (provenance/explainability) 5 → maintained credibly, D6.
+- **Mechanism:** Replace the model's free-form `joint_confidence` with a **calibration head** — fit isotonic regression / Platt scaling on a held-out gold set, so a "0.8" actually means 80 % precision on similar hyperedges. Add ECE / Brier reporting to KG-Bench.
+- **Field status:** LLM calibration is hot research (2023–2025) but rarely applied to graph extraction outputs.
+- **Risk:** Needs a stable gold set; recalibrate whenever the backbone model changes.
+
+### 5.6 Contrastive / counterfactual extraction (anti-hallucination on n-ary)
+- **Lifts:** D6, D5.
+- **Mechanism:** For each candidate hyperedge, also generate a counterfactual ("what would this sentence look like if entity X were NOT a participant?") and keep the edge only if the LLM-judge prefers the original. Catches phantom participants (rationale doc §4.2).
+- **Field status:** Counterfactual data augmentation is established in NLI/QA; not standard for KG extraction.
+- **Risk:** 2× token cost — gate behind a toggle in `experiment-config.ts`.
+
+### 5.7 Property-graph + RDF* dual export
+- **Lifts:** D1 (interop) 3 → 5, D7 (ecosystem) 2 → 3.
+- **Mechanism:** Add exporters: hyperedges → RDF* (reified statements with qualifier triples) AND → labeled-property-graph (Neo4j/Memgraph) with hyperedge-as-node + participant edges carrying roles. Lets downstream tools use SPARQL or Cypher.
+- **Field status:** RDF* is W3C draft (RDF 1.2); LPG↔RDF mapping is debated (no single canonical lossless mapping for n-ary).
+- **Risk:** Lossy round-trip — must publish a fidelity matrix alongside the exporter.
+
+### 5.8 Streaming / incremental hyperedge maintenance
+- **Lifts:** D3 (scalability) 3 → 4.
+- **Mechanism:** Today the pipeline re-extracts per report. Add an incremental ingestion mode: new report → diff against existing hyperedges (same actor + overlapping participants + recent time) → attach as additional `source_passage` instead of duplicating.
+- **Field status:** Streaming KG construction exists for triples (Kafka + RDF); streaming for *hyperedges* is essentially unstudied.
+- **Risk:** Append-only invariant currently relied on by `kg_pathway_runs` — incremental updates must use a separate "consolidated" view, never mutate raw runs.
+
+### 5.9 Differentially-private hyperedge release
+- **Lifts:** Adjacent to D4; opens regulated-domain applicability (clinical).
+- **Mechanism:** When releasing hyperedge counts / embeddings for cross-site federation (Privacy & FL Lab), add ε-DP noise calibrated to *hyperedge sensitivity* (which is higher than triple sensitivity because one row touches N participants).
+- **Field status:** DP for triples / GNNs has growing literature; DP for n-ary hyperedges has almost none — sensitivity bounds are an open question.
+- **Risk:** Mis-calibrated noise either destroys utility or under-protects — must publish the sensitivity proof.
+
+### 5.10 Multilingual code-grounded extraction with translation-invariant validation
+- **Lifts:** D6 (validation), helps KG-Bench Cat 7 (multilingual).
+- **Mechanism:** Extract in the source language (JA, ZH already in KG-Bench corpus) but validate that the *code* fields (CVE, ICD-10, RxCUI, MITRE technique IDs) are language-invariant — same hyperedge from JA and EN versions of the same advisory must agree on the codes, even if `qualifiers` text differs.
+- **Field status:** Multilingual KG benchmarks exist but rarely test *cross-lingual consistency* of the same fact.
+- **Risk:** Requires parallel-language gold cases; cheap to add to `src/lib/kg-bench/corpus.ts` but needs human annotation budget.
+
+### 5.11 GraphRAG over hyperedges (n-ary-aware retrieval)
+- **Lifts:** D2, D5, and quality of the extraction loop itself.
+- **Mechanism:** Current `threat-rag` retrieves triples + text passages. Add hyperedge-level retrieval: given a new report, fetch the K most-similar *hyperedges* (not just nearest entities) and feed them as structured context. Helps the LLM reuse participant patterns instead of re-inventing them.
+- **Field status:** GraphRAG (Microsoft, 2024) is triple/community-based; n-ary GraphRAG is unexplored.
+- **Risk:** Retrieval bias — model may anchor too hard on past hyperedges and miss novel structures. Mitigate with a "novelty floor" toggle.
+
+### 5.12 Provenance-preserving compression (lossy → lossless tiers)
+- **Lifts:** D3 (scalability), D4 (provenance).
+- **Mechanism:** Tier 1 keeps full `source_passage`; tier 2 keeps hash + offset into archived source; tier 3 keeps participant tuple only. Configurable per dataset, with an audit guarantee that tier-1 is reconstructible.
+- **Field status:** Standard in log/event systems, almost absent in KG literature where provenance is usually all-or-nothing.
+- **Risk:** Operator error could promote a tier-3 export to "audit-ready" — needs a posture badge similar to the EXPERIMENT badge already in `DashboardLayout`.
+
+### 5.13 Summary — projected lift
+
+| Technique | Primary dimensions lifted | Estimated maturity gain |
+|-----------|---------------------------|-------------------------|
+| 5.2 Neural-symbolic repair loop | D6 +2 | **+5–6 pp** (highest ROI) |
+| 5.3 HyperSHACL | D1 +1, D6 +2 | +5 pp |
+| 5.4 Event resolution | D5 sustained, D6 +1 | +3–4 pp |
+| 5.7 RDF*/LPG dual export | D1 +2, D7 +1 | +4 pp |
+| 5.1 Hyper-relational embeddings | D2 +1, D5 sustained | +2–3 pp |
+| 5.5 Calibrated confidence | D4 credibility, D6 +1 | +2 pp |
+| 5.11 n-ary GraphRAG | D2 +1, indirectly D5/D6 | +2 pp |
+| 5.6 / 5.8 / 5.9 / 5.10 / 5.12 | mixed | +1–2 pp each |
+
+A realistic medium-term ceiling, by combining 5.2 + 5.3 + 5.4 + 5.7, lifts ThreatGraph from **66 % → ~80 %** — at which point KG-only SOTA and Hybrid HG+KG become substitutes rather than alternatives, with the hybrid winning on D4/D5.
+
+### 5.14 What is intentionally NOT on this list
+- Full OWL reasoning over hyperedges — not under-developed, it is *known infeasible* at scale.
+- LLM fine-tuning on the corpus — possible but orthogonal to the hybrid claim, and would compromise reproducibility against the public `google/gemini-3-flash-preview` baseline.
+- Replacing the triple store with a hypergraph DB (HyperGraphDB, etc.) — would drop D1/D7 faster than it lifts D5.
