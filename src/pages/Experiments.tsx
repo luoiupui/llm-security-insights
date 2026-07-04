@@ -716,7 +716,7 @@ export default function Experiments() {
           </Card>
         </TabsContent>
 
-        {/* ── Smoke Test (Acceptance Test, n=30) ── */}
+        {/* ── Smoke Test (Acceptance Test) ── */}
         <TabsContent value="smoke" className="mt-4 space-y-4">
           <Card className="border-warning/30 bg-warning/5">
             <CardContent className="p-3 flex items-start gap-2">
