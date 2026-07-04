@@ -1049,13 +1049,19 @@ export const sampleTestCases: TestSample[] = [
 ];
 
 /**
- * Smoke test corpus statistics — useful for the UI realism panel.
+ * Corpus statistics (pass-1 expansion, N=50; target N=150 in pass-2).
+ * Statistical reliability is now reported via `bootstrapCI` in
+ * `src/lib/kg-bench/stats.ts`; the `confidenceBand` field below is a
+ * legacy hint retained for the UI panel and MUST NOT be cited as a CI.
  */
 export const corpusStats = {
   totalSamples: sampleTestCases.length,
   cveAnchored: sampleTestCases.filter((s) => s.datasetId === "cisa-kev").length,
   mitreAnchored: sampleTestCases.filter((s) => s.datasetId === "mitre-attack").length,
   multiActorChained: sampleTestCases.filter((s) => s.datasetId === "stix-taxii").length,
+  hardNegatives: sampleTestCases.filter((s) => s.datasetId === "hard-negative").length,
+  clinicalSimulated: sampleTestCases.filter((s) => s.datasetId === "clinical-simulation").length,
+  multilingual: sampleTestCases.filter((s) => /^ml-(ja|zh)-/.test(s.id)).length,
   uniqueCVEs: new Set(
     sampleTestCases.flatMap((s) => s.groundTruth.entities.filter((e) => e.type === "vulnerability").map((e) => e.name)),
   ).size,
@@ -1068,6 +1074,7 @@ export const corpusStats = {
     ),
   ).size,
   realismLevel: "REAL anchors / HAND-LABELLED gold standard",
-  testClassification: "smoke-test (acceptance)" as const,
-  confidenceBand: "±4% (n=30)" as const,
+  testClassification: "expanded (pass-1)" as const,
+  confidenceBand: "compute via bootstrapCI() (n=50 pass-1, n=150 target)" as const,
 };
+
