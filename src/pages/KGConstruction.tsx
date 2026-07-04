@@ -1144,33 +1144,45 @@ export default function KGConstruction() {
           )}
         </TabsContent>
       </Tabs>
+      </section>
 
-      <Collapsible className="mt-6" defaultOpen>
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
-          <span className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-primary" />
-            Pathway C (hypergraph) — live A/B vs Pathway B
-          </span>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3">
-          <HypergraphPathwayPanel />
-        </CollapsibleContent>
-      </Collapsible>
+      {/* ── Pathway C: Hypergraph n-ary extraction ─────────────────── */}
+      <section id="pathway-c" className="scroll-mt-20">
+        <Collapsible className="mt-6" defaultOpen>
+          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border-l-4 border-amber-500 border-y border-r border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
+            <span className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-amber-400" />
+              <span className="font-semibold">Pathway C — Hypergraph (n-ary)</span>
+              <span className="text-[11px] text-muted-foreground">live A/B vs Pathway B</span>
+              <Badge variant="outline" className="text-[10px] border-warning/40 text-warning">Beta</Badge>
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3">
+            <HypergraphPathwayPanel />
+          </CollapsibleContent>
+        </Collapsible>
+      </section>
 
-      <Collapsible className="mt-6">
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
-          <span className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-primary" />
-            Multi-Modal Fusion (mock) — External CTI ⊕ Internal CICIDS
-          </span>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3">
-          <MultiModalFusionMock />
-        </CollapsibleContent>
-      </Collapsible>
+      {/* ── Additional: Multi-Modal Fusion (mock) ─────────────────── */}
+      <section id="pathway-fusion" className="scroll-mt-20">
+        <Collapsible className="mt-6">
+          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border-l-4 border-cyan-500 border-y border-r border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
+            <span className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-cyan-400" />
+              <span className="font-semibold">Multi-Modal Fusion</span>
+              <span className="text-[11px] text-muted-foreground">External CTI ⊕ Internal CICIDS</span>
+              <Badge variant="outline" className="text-[10px] border-muted-foreground/40 text-muted-foreground">Spec · mock only</Badge>
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3">
+            <MultiModalFusionMock />
+          </CollapsibleContent>
+        </Collapsible>
+      </section>
 
     </div>
   );
 }
+
