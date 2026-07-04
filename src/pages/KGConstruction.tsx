@@ -669,7 +669,7 @@ export default function KGConstruction() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Sources: <strong>Paste</strong>, <strong>Test corpus (n=30)</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
+            Sources: <strong>Paste</strong>, <strong>Test corpus (n={domainCases.length})</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
           </p>
         </CardContent>
       </Card>
