@@ -5,7 +5,7 @@ import {
   Network, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle,
   DownloadCloud, Sparkles, FileText, FlaskConical, Rss, Upload, Plug,
   LayoutDashboard, Crosshair, RefreshCw, GitBranch, Workflow, Gauge, Share2, Brain,
-  ImageDown,
+  ImageDown, Bot,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -556,15 +556,50 @@ export default function KGConstruction() {
         )}
       </div>
 
-      {/* ── Pathway A: Experimental agent loop (does not affect Pathway B below) ── */}
-      <AgentLoopPanel />
+      {/* ── Pathway navigator ─────────────────────────────────────── */}
+      <Card className="border-border/50 bg-card/60">
+        <CardContent className="p-3 flex flex-wrap gap-2 items-center text-xs">
+          <span className="text-muted-foreground mr-1">Jump to pathway:</span>
+          <a href="#pathway-a" className="px-2 py-1 rounded border border-purple-500/40 text-purple-300 hover:bg-purple-500/10">
+            Pathway A · Agent loop <Badge variant="outline" className="ml-1 border-warning/40 text-warning">Beta</Badge>
+          </a>
+          <a href="#pathway-b" className="px-2 py-1 rounded border border-primary/40 text-primary hover:bg-primary/10">
+            Pathway B · Deterministic 7-stage <Badge variant="outline" className="ml-1 border-success/40 text-success">Default</Badge>
+          </a>
+          <a href="#pathway-c" className="px-2 py-1 rounded border border-amber-500/40 text-amber-300 hover:bg-amber-500/10">
+            Pathway C · Hypergraph <Badge variant="outline" className="ml-1 border-warning/40 text-warning">Beta</Badge>
+          </a>
+          <a href="#pathway-fusion" className="px-2 py-1 rounded border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10">
+            Multi-Modal Fusion <Badge variant="outline" className="ml-1 border-muted-foreground/40 text-muted-foreground">Spec / Mock</Badge>
+          </a>
+        </CardContent>
+      </Card>
 
-      {/* ── Reproducibility & Comparison Mode (Pathway B — deterministic) ─────── */}
-      <ReproPanel
-        value={repro}
-        preset={reproPreset}
-        onChange={(p, c) => { setReproPreset(p); setRepro(c); }}
-      />
+      {/* ── Pathway A: Experimental agent loop ─────────────────────── */}
+      <section id="pathway-a" className="scroll-mt-20 space-y-3">
+        <div className="flex items-center gap-2 border-l-4 border-purple-500 pl-3 py-1">
+          <Bot className="w-4 h-4 text-purple-400" />
+          <h2 className="text-sm font-semibold tracking-tight">Pathway A — Agent Loop (AI-SDK, LLM chooses order)</h2>
+          <Badge variant="outline" className="text-[10px] border-warning/40 text-warning">Beta · not benchmarked</Badge>
+        </div>
+        <AgentLoopPanel />
+      </section>
+
+      {/* ── Pathway B: Deterministic 7-stage pipeline (default) ───── */}
+      <section id="pathway-b" className="scroll-mt-20 space-y-3">
+        <div className="flex items-center gap-2 border-l-4 border-primary pl-3 py-1">
+          <Workflow className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold tracking-tight">
+            Pathway B — Deterministic 7-stage pipeline (default · KG-Bench scored)
+          </h2>
+          <span className="text-[11px] text-muted-foreground">preprocess → RAG → extract → KB-validate → conflicts → KG-query → persist</span>
+        </div>
+        <ReproPanel
+          value={repro}
+          preset={reproPreset}
+          onChange={(p, c) => { setReproPreset(p); setRepro(c); }}
+        />
+
 
       {/* ── Multi-source input picker ─────────────────────────────── */}
       <Card className="border-border/50 bg-card/80">
@@ -1109,33 +1144,45 @@ export default function KGConstruction() {
           )}
         </TabsContent>
       </Tabs>
+      </section>
 
-      <Collapsible className="mt-6" defaultOpen>
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
-          <span className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-primary" />
-            Pathway C (hypergraph) — live A/B vs Pathway B
-          </span>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3">
-          <HypergraphPathwayPanel />
-        </CollapsibleContent>
-      </Collapsible>
+      {/* ── Pathway C: Hypergraph n-ary extraction ─────────────────── */}
+      <section id="pathway-c" className="scroll-mt-20">
+        <Collapsible className="mt-6" defaultOpen>
+          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border-l-4 border-amber-500 border-y border-r border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
+            <span className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-amber-400" />
+              <span className="font-semibold">Pathway C — Hypergraph (n-ary)</span>
+              <span className="text-[11px] text-muted-foreground">live A/B vs Pathway B</span>
+              <Badge variant="outline" className="text-[10px] border-warning/40 text-warning">Beta</Badge>
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3">
+            <HypergraphPathwayPanel />
+          </CollapsibleContent>
+        </Collapsible>
+      </section>
 
-      <Collapsible className="mt-6">
-        <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
-          <span className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-primary" />
-            Multi-Modal Fusion (mock) — External CTI ⊕ Internal CICIDS
-          </span>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3">
-          <MultiModalFusionMock />
-        </CollapsibleContent>
-      </Collapsible>
+      {/* ── Additional: Multi-Modal Fusion (mock) ─────────────────── */}
+      <section id="pathway-fusion" className="scroll-mt-20">
+        <Collapsible className="mt-6">
+          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border-l-4 border-cyan-500 border-y border-r border-border/50 bg-card/60 px-4 py-2 text-sm hover:bg-card/80">
+            <span className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-cyan-400" />
+              <span className="font-semibold">Multi-Modal Fusion</span>
+              <span className="text-[11px] text-muted-foreground">External CTI ⊕ Internal CICIDS</span>
+              <Badge variant="outline" className="text-[10px] border-muted-foreground/40 text-muted-foreground">Spec · mock only</Badge>
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3">
+            <MultiModalFusionMock />
+          </CollapsibleContent>
+        </Collapsible>
+      </section>
 
     </div>
   );
 }
+
