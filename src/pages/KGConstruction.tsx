@@ -591,26 +591,35 @@ export default function KGConstruction() {
             </TabsContent>
 
             <TabsContent value="corpus" className="mt-3 space-y-2">
-              <Select value={selectedCaseId} onValueChange={handleSelectCase}>
-                <SelectTrigger className="bg-secondary/30">
-                  <SelectValue placeholder={`Select 1 of ${sampleTestCases.length} hand-curated cases…`} />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {sampleTestCases.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs">
-                      <span className="font-mono">{c.id}</span> — {c.source.slice(0, 60)}{c.source.length > 60 ? "…" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Textarea
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                className="min-h-[80px] font-mono text-xs bg-secondary/30"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                The same n=30 corpus drives every experimental unit in the thesis (§2.1). Selecting a case loads its real-world text into the pipeline.
-              </p>
+              {domainCases.length === 0 ? (
+                <div className="p-3 rounded bg-warning/10 border border-warning/30 text-xs text-warning">
+                  The hand-curated test corpus is <strong>CTI-only</strong> in the current build (n={sampleTestCases.length}).
+                  Switch the domain to <strong>CTI</strong> in the header to load cases, or use <strong>Paste text</strong> in Clinical mode.
+                </div>
+              ) : (
+                <>
+                  <Select value={selectedCaseId} onValueChange={handleSelectCase}>
+                    <SelectTrigger className="bg-secondary/30">
+                      <SelectValue placeholder={`Select 1 of ${domainCases.length} hand-curated ${domain.toUpperCase()} cases…`} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {domainCases.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          <span className="font-mono">{c.id}</span> — {c.source.slice(0, 60)}{c.source.length > 60 ? "…" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Textarea
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    className="min-h-[80px] font-mono text-xs bg-secondary/30"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    CTI-only corpus (N={domainCases.length}, pass-1 expansion; target N=150). Selecting a case loads its real-world text into the pipeline.
+                  </p>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="feed" className="mt-3 space-y-2">
