@@ -24,6 +24,7 @@ import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel
 import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
 import { DomainBanner } from "@/components/DomainSwitch";
+import { useDomain } from "@/contexts/DomainContext";
 import { AgentLoopPanel } from "@/components/AgentLoopPanel";
 import { MultiModalFusionMock } from "@/components/MultiModalFusionMock";
 import { HypergraphPathwayPanel } from "@/components/HypergraphPathwayPanel";
