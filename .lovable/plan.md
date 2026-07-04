@@ -1,73 +1,60 @@
-# Implementation roadmap & capability map
+# Plan: Corpus scale-up feasibility memo (N=56 → N≥500)
 
-Create a single, living document that (a) illustrates everything already implemented in the project across all pathways, domains, and modules, and (b) sets up a versioned roadmap format that gets updated with every future feature. Same artefact shape as the existing `issue3-*.md` reports — Markdown under `public/reports/`, registered in `manifest.json`, downloadable from the Reports panel.
+Create one new research artefact — no code, UI, schema, or edge-function changes. It answers: *is it feasible to collect ≥500 CTI documents from public sources, comparable to DNRTI (175 docs / ~10k entities), CASIE (1,000), CTIBench (thousands)?*
 
-## Deliverables
+## Deliverable
 
-1. **New file:** `public/reports/implementation-roadmap.md` — the capability map + roadmap.
-2. **New file:** `/mnt/documents/threatgraph_capability_map.mmd` — one Mermaid diagram summarising the platform, referenced from the doc via `<lov-artifact>`.
-3. **Update:** `public/reports/manifest.json` — one new entry.
+`public/reports/issue3-corpus-scaleup-feasibility.md` (append entry to `public/reports/manifest.json`).
 
-No code changes, no schema changes, no UI changes. Research-artefact only.
+## Structure
 
-## Structure of `implementation-roadmap.md`
+1. **Question & framing** — restate reviewer challenge; define "feasible" along four axes: (a) source availability, (b) licensing, (c) annotation cost, (d) statistical sufficiency.
 
-1. **Purpose & how to read this document**
-   - Positions the project as a comprehensive LLM-KG research platform, not a single-purpose extractor.
-   - States the update rule: every merged feature adds one row to §6 (Change log) and, if it introduces a new capability, one row to §3 (Capability matrix). Anything not in §3 is not shipped.
+2. **Target sizing table** — three tiers with justification:
+   - Tier-1 N=200 (matches DNRTI/APTNER band, closes P0 in `issue3-sota-benchmark-gap.md`)
+   - Tier-2 N=500 (matches CASIE band, enables per-stratum CIs)
+   - Tier-3 N=1,000+ (matches CTIBench band, enables fine-tuning comparators)
 
-2. **User personas addressed** — one paragraph each, so a reader picks the right entry point:
-   - **CTI analyst** — Threat Feed, KG Construction (CTI), Attribution, adaptive conflict layers.
-   - **Clinical researcher (simulation)** — Domain switch, Clinical KG, PHI-scrub guard, Simulation banner.
-   - **ML / KG researcher** — KG-Bench, Experiments, Ablation runner, Pathway A vs B comparison, `stats.ts`.
-   - **Privacy / security engineer** — Redaction Lab, Privacy & FL Lab, AI Threat Model, prompt-firewall.
-   - **Reproducibility auditor** — Repro panel, `pipeline_perf_events`, deterministic pathway B, mined-rule diffs.
-   - **Thesis author / reviewer** — Reports panel, issue-3 reports, SOTA benchmark gap doc, implementation log.
+3. **Public source inventory** with realistic yield/year and license class:
+   | Source | Yield/yr | License | Notes |
+   |---|---|---|---|
+   | CISA KEV catalog | ~200 | US-Gov public domain | already wired in `cisa-advisories-ingest` |
+   | CISA ICS-CERT advisories | ~400 | US-Gov PD | ICS/OT stratum |
+   | MITRE ATT&CK procedure examples | ~1,500 static | Apache-2.0 | atomic stratum |
+   | Vendor PSIRTs (MSRC, Cisco Talos, Fortinet, Ivanti, Palo Alto, Check Point) | ~2,000 combined | vendor T&C — paraphrase-only | CVE-anchored |
+   | Mandiant / CrowdStrike / Microsoft threat blogs | ~500 | copyrighted — paraphrase + cite | APT campaigns |
+   | JPCERT/CC 注意喚起 & weekly | ~150 | JPCERT terms — cite | JA stratum |
+   | CNCERT/CC 通报 + QiAnXin ATI | ~200 | source-cite | ZH stratum |
+   | STIX/TAXII public feeds (OASIS Open, LimoTracker, abuse.ch) | ~5,000 IoC-bundles | CC0/CC-BY | machine-readable, needs narrative synthesis |
+   | AlienVault OTX pulses | ~10,000/yr | OTX ToS — research OK | community-labeled |
+   | Academic reuse: DNRTI (175), APTNER (344), CASIE (1000), MalwareTextDB | fixed | mixed (CC-BY / research-only) | **reuse as test-split, not merge** |
+   
+   **Conclusion**: gross public supply per year is 5–10k candidate documents. N=500 is comfortably feasible; N=1,000 within one annotator-quarter.
 
-3. **Capability matrix (what is actually implemented today)** — grouped tables. Every row cites the concrete file / edge function / page so the claim is auditable.
+4. **Licensing & redistribution** — three-lane strategy:
+   - Lane A (redistributable corpus): CISA + MITRE + STIX/TAXII CC0/CC-BY + OTX under research clause → target ~300 docs publishable.
+   - Lane B (paraphrase-only): vendor PSIRT + Mandiant/CrowdStrike/JPCERT/CNCERT → store *paraphrased narrative + source URL + hash of original*, never redistribute source text. Precedent: DNRTI and APTNER both paraphrase.
+   - Lane C (reference test split): DNRTI/APTNER/CASIE consumed under their published licenses for **held-out benchmarking only**, not merged into training pool.
 
-   3.1 **Pipelines / pathways.** Pathway B stages (7), Pathway A agent loop with tool catalog, Pathway C hypergraph.
-   3.2 **Domains.** CTI (STIX 2.1) + Clinical (ICD-10 / RxCUI / LOINC), domain switch, per-domain ontology & validators.
-   3.3 **Knowledge-graph surfaces.** Entities/relations, hypergraph persistence, corroborated-finding ontology, KG query, attribution.
-   3.4 **Adaptive reasoning (C1–C4).** Temporal rules, kill-chain rules, LLM-mined→compiled rules, embedding-anomaly hook.
-   3.5 **Evaluation.** KG-Bench (7 categories + multilingual), Experiments page, ablation runner, `stats.ts` (Wilson / bootstrap / McNemar / stratified k-fold).
-   3.6 **Privacy / safety.** Redaction pipeline, DP, FedAvg simulation, secure-agg, MIA sim, prompt-firewall, PHI-scrub.
-   3.7 **Data ingestion.** CISA advisories ingest, KB ingest, multilingual CTI corpus (JA/ZH), flow-feature ingest.
-   3.8 **Observability & repro.** `pipeline_perf_events`, self-monitoring panel, repro panel, implementation log, LLM call-site inventory.
-   3.9 **Reports & artefacts.** Enumerate every file already in `public/reports/` with a one-line purpose.
-   3.10 **GitHub & external sync.** `github-sync.ts`, Reports downloads.
+5. **Annotation cost model** — using the actual stats layer already in `src/lib/kg-bench/stats.ts`:
+   - Single-annotator throughput observed: ~12 min/doc for entities+relations+kill-chain.
+   - N=500 ⇒ ~100 annotator-hours ⇒ 2.5 person-weeks. Dual-annotation on a 15 % subset for Cohen's κ adds ~30 h.
+   - Weak-supervision bootstrap: run existing `threat-extract` (Pathway B) as silver labels, then human-adjudicate — cuts effort ~40 %.
+   - Cost at 3 domain-expert annotators × 3 weeks = feasible for a Master's / small-lab budget; N=1,000 requires ~6 weeks or crowd-augmentation with expert review.
 
-4. **Architecture snapshot (Mermaid)**
-   - One diagram showing: input sources → domain switch → Pathway A / B / C → adaptive C1–C4 layer → KG + HG surfaces → evaluation & reporting outputs. Cross-cutting bands for privacy/safety and observability.
+6. **Entity density note** — DNRTI's ~10k entities on 175 docs (~57 ent/doc) is high because long APT reports. Our current 56 docs already yield ~19 ent/doc (from `corpusStats`). Projected N=500 at same density ≈ 9,500 entities — **entity-count parity with DNRTI reachable at N≈500**, not requiring 1,000.
 
-5. **Maturity classification** — every row in §3 is tagged with one of:
-   - **GA** (used in headline claims, unit-tested, evaluated in KG-Bench),
-   - **Beta** (implemented, exercised, no formal benchmark yet),
-   - **Sim** (simulation only — e.g. Clinical, FL Lab),
-   - **Spec** (design document exists, code partial or absent).
+7. **Statistical payoff** (ties back to `stats.ts`):
+   - N=200 → Wilson 95 % CI half-width on F1≈0.85 shrinks from ±0.09 (n=56) to ±0.05.
+   - N=500 → ±0.03, enough to claim SOTA-band membership at *p*<0.05 via McNemar.
+   - N=1,000 → per-stratum CIs (7 strata) each with n≥50 — enables the per-type F1 tables reviewers demand.
 
-6. **Change log (append-only)** — reverse-chronological table of every meaningful milestone that has already landed, seeded from `implementation-log.csv`. Columns: date, area (§3 sub-section), summary, files touched, maturity.
+8. **Risk register** — cite-cost creep, source-drift over time, non-English annotator scarcity, license reinterpretation risk on paraphrased vendor blogs, JPCERT/CNCERT redistribution ambiguity → mitigations for each.
 
-7. **Forward roadmap** — three time horizons, each is a bullet list keyed to the P0/P1/P2/P3 buckets already used in `issue3-sota-benchmark-gap.md` and `adaptive-layers-clarification.md`, so the roadmap is not a new tax on the project:
-   - **Next (P0 — before paper submission):** wire C1–C4 into the live `threat-conflicts` edge function; N=56 → N≥150; run on DNRTI / APTNER; IAA on ≥ 10 % of corpus; version-pin the LLM.
-   - **Soon (P1):** Performance tab UI over `pipeline_perf_events`; per-type F1 tables; component ablation C1–C4; per-language F1; STIX 2.1 round-trip validation.
-   - **Later (P2 / P3):** fine-tuned upper-bound comparator (LoRA); cross-dataset generalisation run; publish paraphrased corpus; camera-ready polish.
+9. **Recommendation** — commit to **Tier-2 (N=500)** as the paper-defensible target: entity-count parity with DNRTI, doc-count parity with CASIE, achievable in ~3 person-weeks under Lane A+B licensing without any private data. Tier-3 (N=1,000) marked as "post-thesis extension" aligning with fine-tuned upper-bound P2 item already in `issue3-sota-benchmark-gap.md`.
 
-8. **How to update this document** — one short section:
-   - Every PR that adds a feature must add (i) one row in §6 change log with today's date, (ii) if new capability, one row in §3 with file citation and maturity tag, (iii) if it changes an existing maturity level, edit the row in place.
-   - Every PR that closes a P0/P1/P2/P3 roadmap item must strike it through in §7 and note the closing date.
-   - Every quarter, roll the change-log into an "archived milestones" collapsible so §6 stays scannable.
-
-## Technical details
-
-- Pure Markdown, ~600–900 lines, same conventions as `issue3-comparative-scorecard.md`.
-- Mermaid diagram written to `/mnt/documents/threatgraph_capability_map.mmd` and referenced via a `<lov-artifact>` tag inside the doc.
-- Every capability row cites at least one concrete path (e.g. `src/lib/conflicts/temporal-rules.ts`, `supabase/functions/threat-conflicts/index.ts`, `src/pages/Experiments.tsx`).
-- No emojis in Mermaid.
-- `manifest.json` gets one appended entry `implementation-roadmap.md`.
+10. **Cross-refs** — link to `corpus-expansion-and-statistics.md`, `issue3-sota-benchmark-gap.md`, `implementation-roadmap.md` P0 bucket (update roadmap to reflect N=500 target on approval, in a follow-up turn).
 
 ## Out of scope
 
-- Any UI panel that renders the roadmap in-app (future item; can be added when Reports panel gets a redesign).
-- Any code, edge-function, schema, or test change.
-- Auto-generating the change log from git history (kept manual + `implementation-log.csv`-seeded for now).
+No changes to `src/lib/test-corpus.ts`, no new edge functions, no UI. Pure research memo.
