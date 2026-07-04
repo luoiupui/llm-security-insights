@@ -7,11 +7,12 @@ Three parallel workstreams, each landing in code + a short academic-style report
 
 Goal: replace "N=30 hand-curated" with a stratified corpus large enough for confidence intervals.
 
-- **Grow gold corpus** in `src/lib/test-corpus.ts` from 30 → **120–150 samples**, stratified:
+- **Grow gold corpus** in `src/lib/test-corpus.ts` from 30 → **120–150 samples, CTI-only** (Clinical stratum removed per scope narrowing 2026-07-04), stratified:
   - 40 CTI atomic (MITRE ATT&CK anchored)
   - 30 CTI multi-stage / kill-chain (STIX/TAXII, CISA KEV)
-  - 20 CVE-heavy (NVD 2023–2024)
-  - 30 Clinical (ICD-10/RxCUI/LOINC), incl. 10 JA + 10 ZH multilingual
+  - 25 CVE-heavy (NVD 2023–2024, incl. Fortinet / Check Point / Ivanti PSIRTs)
+  - 20 ICS / OT advisories (CISA ICS-CERT, Dragos)
+  - 20 Multilingual CTI (10 JA JPCERT/CC + 10 ZH CNCERT / QiAnXin paraphrase)
   - 15 hard-negative / adversarial (hallucination bait, contradiction, temporal drift)
   - 15 hypergraph / n-ary events (feeds Cat `fusion_corroboration` + hyperedge scorer)
 - **Statistical reliability layer** in `src/lib/kg-bench/`:
