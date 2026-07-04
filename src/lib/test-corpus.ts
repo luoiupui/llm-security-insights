@@ -981,32 +981,158 @@ export const sampleTestCases: TestSample[] = [
       ],
     },
   },
+  /* ───────── Multilingual CTI (JA / ZH) — replaces prior clinical stratum ───────── */
   {
-    id: "clin-004",
-    datasetId: "clinical-simulation",
-    source: "Simulated clinical narrative — anticoagulation adjustment",
-    text: "Patient with atrial fibrillation (ICD-10 I48.91) on warfarin (RxCUI 11289) presented with INR 4.5, warfarin was held and vitamin K administered.",
+    id: "ml-ja-002",
+    datasetId: "mitre-attack",
+    source: "JPCERT/CC 注意喚起 paraphrase — Ivanti Connect Secure, 2024",
+    text: "攻撃者は CVE-2024-21887 の脆弱性を悪用して Ivanti Connect Secure に対してリモートコード実行を行い、Webshell を設置しました (T1505.003)。その後、認証情報を窃取して横展開に利用しました。",
     groundTruth: {
       entities: [
-        { name: "I48.91", type: "condition" },
-        { name: "warfarin", type: "medication" },
-        { name: "vitamin K", type: "medication" },
+        { name: "CVE-2024-21887", type: "vulnerability" },
+        { name: "Ivanti Connect Secure", type: "software" },
+        { name: "T1505.003", type: "ttp" },
       ],
-      relations: [{ source: "warfarin", relation: "adjusted_for", target: "I48.91" }],
+      relations: [
+        { source: "CVE-2024-21887", relation: "affects", target: "Ivanti Connect Secure" },
+      ],
+      causalLinks: [
+        { cause: "CVE-2024-21887 exploitation", effect: "Webshell installation", type: "enables" },
+        { cause: "Webshell installation", effect: "credential theft", type: "leads_to" },
+      ],
     },
   },
   {
-    id: "clin-005",
-    datasetId: "clinical-simulation",
-    source: "Simulated clinical narrative — sepsis workflow",
-    text: "Septic shock (ICD-10 R65.21) secondary to community-acquired pneumonia; broad-spectrum antibiotics started (RxCUI 723). Lactate 4.2 mmol/L (LOINC 2524-7).",
+    id: "ml-ja-003",
+    datasetId: "mitre-attack",
+    source: "JPCERT/CC weekly report paraphrase — Lazarus, 2024",
+    text: "Lazarus グループはスピアフィッシング (T1566.002) により金融機関を標的とし、AppleJeus マルウェアを配布して暗号資産取引所から資金を窃取しました。",
     groundTruth: {
       entities: [
-        { name: "R65.21", type: "condition" },
-        { name: "pneumonia", type: "condition" },
-        { name: "2524-7", type: "lab_test" },
+        { name: "Lazarus", type: "threat_actor" },
+        { name: "AppleJeus", type: "malware" },
+        { name: "T1566.002", type: "ttp" },
       ],
-      relations: [{ source: "pneumonia", relation: "causes", target: "R65.21" }],
+      relations: [
+        { source: "Lazarus", relation: "uses", target: "AppleJeus" },
+        { source: "Lazarus", relation: "uses", target: "T1566.002" },
+      ],
+    },
+  },
+  {
+    id: "ml-zh-002",
+    datasetId: "cisa-kev",
+    source: "CNCERT/CC 通报 paraphrase — Volt Typhoon, 2024",
+    text: "Volt Typhoon 攻击组织利用 CVE-2023-27997 漏洞对 Fortinet FortiOS SSL-VPN 发起攻击,通过 living-off-the-land 技术 (T1059.001) 在关键基础设施网络中长期潜伏。",
+    groundTruth: {
+      entities: [
+        { name: "Volt Typhoon", type: "threat_actor" },
+        { name: "CVE-2023-27997", type: "vulnerability" },
+        { name: "FortiOS", type: "software" },
+        { name: "T1059.001", type: "ttp" },
+      ],
+      relations: [
+        { source: "CVE-2023-27997", relation: "affects", target: "FortiOS" },
+        { source: "Volt Typhoon", relation: "exploits", target: "CVE-2023-27997" },
+      ],
+    },
+  },
+  {
+    id: "ml-zh-003",
+    datasetId: "mitre-attack",
+    source: "QiAnXin 威胁情报中心 paraphrase — APT41, 2024",
+    text: "APT41 组织利用 ShadowPad 后门对东南亚政府机构发起供应链攻击,通过合法软件更新通道 (T1195.002) 部署恶意载荷。",
+    groundTruth: {
+      entities: [
+        { name: "APT41", type: "threat_actor" },
+        { name: "ShadowPad", type: "malware" },
+        { name: "T1195.002", type: "ttp" },
+      ],
+      relations: [
+        { source: "APT41", relation: "uses", target: "ShadowPad" },
+        { source: "APT41", relation: "uses", target: "T1195.002" },
+      ],
+    },
+  },
+  /* ───────── ICS / OT threat advisories (CISA ICS-CERT anchored) ───────── */
+  {
+    id: "ics-001",
+    datasetId: "cisa-kev",
+    source: "CISA ICSA-22-083-05 — Rockwell ControlLogix",
+    text: "CVE-2022-1161 is an improper input validation flaw in Rockwell Automation ControlLogix and CompactLogix 5380 PLCs that allows an attacker with network access to modify user program logic and cause loss of view or control on OT networks.",
+    groundTruth: {
+      entities: [
+        { name: "CVE-2022-1161", type: "vulnerability" },
+        { name: "ControlLogix", type: "software" },
+        { name: "CompactLogix 5380", type: "software" },
+      ],
+      relations: [
+        { source: "CVE-2022-1161", relation: "affects", target: "ControlLogix" },
+        { source: "CVE-2022-1161", relation: "affects", target: "CompactLogix 5380" },
+      ],
+      causalLinks: [
+        { cause: "input validation bypass", effect: "PLC logic modification", type: "triggers" },
+        { cause: "PLC logic modification", effect: "loss of OT control", type: "leads_to" },
+      ],
+    },
+  },
+  {
+    id: "ics-002",
+    datasetId: "stix-taxii",
+    source: "Dragos + CISA joint advisory — PIPEDREAM / INCONTROLLER, 2022",
+    text: "The CHERNOVITE actor developed PIPEDREAM (aka INCONTROLLER), a modular ICS attack framework targeting Schneider Electric MODICON PLCs and OMRON Sysmac NJ/NX controllers via CODESYS and Modbus, capable of scanning, credential brute force, and controller takeover.",
+    groundTruth: {
+      entities: [
+        { name: "CHERNOVITE", type: "threat_actor" },
+        { name: "PIPEDREAM", type: "malware" },
+        { name: "INCONTROLLER", type: "malware" },
+        { name: "MODICON", type: "software" },
+        { name: "Sysmac NJ/NX", type: "software" },
+      ],
+      relations: [
+        { source: "CHERNOVITE", relation: "uses", target: "PIPEDREAM" },
+        { source: "PIPEDREAM", relation: "also_known_as", target: "INCONTROLLER" },
+        { source: "PIPEDREAM", relation: "affects", target: "MODICON" },
+        { source: "PIPEDREAM", relation: "affects", target: "Sysmac NJ/NX" },
+      ],
+    },
+  },
+  /* ───────── Supplementary CVE-heavy (NVD 2023-2024) ───────── */
+  {
+    id: "nvd-001",
+    datasetId: "cisa-kev",
+    source: "NVD + Fortinet PSIRT — CVE-2024-21762",
+    text: "CVE-2024-21762 is an out-of-bounds write in Fortinet FortiOS SSL-VPN that allows a remote unauthenticated attacker to execute arbitrary code via crafted HTTP requests. Chinese state-nexus actors were observed exploiting it in the wild.",
+    groundTruth: {
+      entities: [
+        { name: "CVE-2024-21762", type: "vulnerability" },
+        { name: "FortiOS", type: "software" },
+      ],
+      relations: [
+        { source: "CVE-2024-21762", relation: "affects", target: "FortiOS" },
+      ],
+      causalLinks: [
+        { cause: "out-of-bounds write", effect: "unauthenticated RCE", type: "triggers" },
+      ],
+    },
+  },
+  {
+    id: "nvd-002",
+    datasetId: "cisa-kev",
+    source: "NVD + Check Point advisory — CVE-2024-24919",
+    text: "CVE-2024-24919 is an information-disclosure flaw in Check Point Security Gateway remote-access VPN that lets an unauthenticated attacker read arbitrary files including password hashes, enabling downstream credential-based intrusion.",
+    groundTruth: {
+      entities: [
+        { name: "CVE-2024-24919", type: "vulnerability" },
+        { name: "Check Point Security Gateway", type: "software" },
+      ],
+      relations: [
+        { source: "CVE-2024-24919", relation: "affects", target: "Check Point Security Gateway" },
+      ],
+      causalLinks: [
+        { cause: "information disclosure", effect: "credential hash leak", type: "triggers" },
+        { cause: "credential hash leak", effect: "downstream intrusion", type: "enables" },
+      ],
     },
   },
   {
