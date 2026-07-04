@@ -1186,8 +1186,9 @@ export const corpusStats = {
   mitreAnchored: sampleTestCases.filter((s) => s.datasetId === "mitre-attack").length,
   multiActorChained: sampleTestCases.filter((s) => s.datasetId === "stix-taxii").length,
   hardNegatives: sampleTestCases.filter((s) => s.datasetId === "hard-negative").length,
-  clinicalSimulated: sampleTestCases.filter((s) => s.datasetId === "clinical-simulation").length,
-  multilingual: sampleTestCases.filter((s) => /^ml-(ja|zh)-/.test(s.id)).length,
+  multilingualJA: sampleTestCases.filter((s) => /^ml-ja-/.test(s.id)).length,
+  multilingualZH: sampleTestCases.filter((s) => /^ml-zh-/.test(s.id)).length,
+  icsOt: sampleTestCases.filter((s) => /^ics-/.test(s.id)).length,
   uniqueCVEs: new Set(
     sampleTestCases.flatMap((s) => s.groundTruth.entities.filter((e) => e.type === "vulnerability").map((e) => e.name)),
   ).size,
@@ -1200,7 +1201,7 @@ export const corpusStats = {
     ),
   ).size,
   realismLevel: "REAL anchors / HAND-LABELLED gold standard",
-  testClassification: "expanded (pass-1)" as const,
-  confidenceBand: "compute via bootstrapCI() (n=50 pass-1, n=150 target)" as const,
+  testClassification: "expanded (pass-1, CTI-only)" as const,
+  confidenceBand: "compute via bootstrapCI() (n=56 pass-1, n=150 target)" as const,
 };
 
