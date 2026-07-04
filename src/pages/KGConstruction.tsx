@@ -90,6 +90,10 @@ export default function KGConstruction() {
   const [reproPreset, setReproPreset] = useState<ReproPreset>(initial.preset);
   const [repro, setRepro] = useState<ReproConfig>(initial.config);
   const pipeline = useThreatPipeline();
+  const { domain } = useDomain();
+  // Corpus is CTI-only in the current build; when the user switches to Clinical,
+  // hide the CTI cases rather than mixing them with a clinical selector.
+  const domainCases = domain === "cti" ? sampleTestCases : [];
 
   // Lazy-load the live feed when user opens the tab
   useEffect(() => {
