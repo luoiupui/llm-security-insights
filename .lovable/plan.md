@@ -1,82 +1,74 @@
-# Hypergraph Pathway — Parallel Track (PH-series)
 
-## TL;DR (revised)
-**Don't replace, run in parallel.** The hypergraph approach becomes a **second, independent extraction pathway** that runs alongside the current triple-based pipeline on the same input. Both pathways share Stages 1–2 (preprocess + RAG) and Stage 4 (kb-validate, per-entity). They diverge at Stage 3 (extraction) and re-converge at Stage 6 (attribution + comparison panel). This makes the hypergraph claim **falsifiable by direct A/B**, not just augmented narrative.
+# Address the three reviewer critiques
 
-Phase H1 (foundations: `Hyperedge` type, decompose/reassemble, 10 unit tests) is already merged and behavior-neutral. The phases below are re-scoped from "augmentation" to "parallel pathway C".
+Three parallel workstreams, each landing in code + a short academic-style report so the thesis can cite concrete numbers and mechanisms.
 
-## Pathway Map
+## 1. Expand the evaluation corpus (30 → ~150 cases + bootstrap CIs)
 
-```text
-                   ┌─ Pathway B (current, triple-native) ─┐
-Stage 1,2 ────────►│  Stage 3: GRAPH_NATIVE_COT (triples) │──► Stage 4 ──► Stage 5 (R1–R13) ──► Stage 6 ─┐
-(shared)           └──────────────────────────────────────┘                                              ├─► Comparison Panel
-                   ┌─ Pathway C (new, hyperedge-native) ──┐                                              │   (KG-Bench + UI)
-                   │  Stage 3': HYPEREDGE_COT (hyperedges)│──► Stage 4 ──► Stage 5' (R14 joint) ──► Stage 6 ┘
-                   └──────────────────────────────────────┘
-```
+Goal: replace "N=30 hand-curated" with a stratified corpus large enough for confidence intervals.
 
-Pathway C is selectable per-run via `pathway: "B" | "C" | "both"`; `"both"` runs them in parallel and scores deltas.
+- **Grow gold corpus** in `src/lib/test-corpus.ts` from 30 → **120–150 samples**, stratified:
+  - 40 CTI atomic (MITRE ATT&CK anchored)
+  - 30 CTI multi-stage / kill-chain (STIX/TAXII, CISA KEV)
+  - 20 CVE-heavy (NVD 2023–2024)
+  - 30 Clinical (ICD-10/RxCUI/LOINC), incl. 10 JA + 10 ZH multilingual
+  - 15 hard-negative / adversarial (hallucination bait, contradiction, temporal drift)
+  - 15 hypergraph / n-ary events (feeds Cat `fusion_corroboration` + hyperedge scorer)
+- **Statistical reliability layer** in `src/lib/kg-bench/`:
+  - New `stats.ts`: `bootstrapCI(scores, B=1000, α=0.05)`, `mcnemarTest(sysA, sysB)`, `wilsonInterval(p, n)`.
+  - Runner emits per-category F1 **with 95% CI** and pairwise significance (Ours vs LLM-Zeroshot, Ours vs Rule-Based).
+  - Add `k`-fold (k=5) stratified split option so numbers aren't a single point estimate.
+- **UI**: extend `KGBenchPanel.tsx` — show `F1 ± CI`, "n=" per stratum, and a significance badge on the pairwise deltas.
+- **Report**: `public/reports/corpus-expansion-and-statistics.md` — sampling protocol, stratum table, inter-annotator note, bootstrap methodology, and the new headline numbers vs the old N=30 result.
 
-## Revised Phases
+## 2. Adaptive conflict detection (beyond hand-written rules)
 
-### PH1 — Foundations ✅ (shipped)
-`hypergraph.ts`, JSON schema v1, decompose/reassemble, 10 tests. No behavior change. Already merged.
+Diagnosis first, then layered fix. Keeps the current 7 symbolic rules (they are the reproducible baseline) and adds three adaptive layers on top.
 
-### PH2 — Parallel extractor (Stage 3')
-- New edge function `threat-extract-hyper/index.ts` (sibling of `threat-extract`, **not** a fork of its prompt).
-- Prompt `HYPEREDGE_NATIVE_COT_PROMPT`: 6 steps that emit `hyperedges[]` as primary output, with `decomposed_triples` auto-derived for downstream compatibility.
-- Same Gemini-3-flash backbone, same `domain` param, same I/O envelope as `threat-extract`.
-- Pipeline contract: add stage `extract_hyper` to `src/lib/threat-pipeline.ts` mirroring `extract`.
+- **Coverage audit** — script `scripts/audit-conflict-coverage.mjs` that reads every rule in `supabase/functions/threat-conflicts/index.ts` + `src/lib/conflicts/*.ts` and maps it to a taxonomy (temporal, causal, ontological, provenance, cross-modal). Output: `public/reports/conflict-rule-coverage-matrix.md` — explicitly lists uncovered classes (time drift across reports, multi-stage jumper, actor alias flip, TTP-chain shortcut).
+- **Layer C1 — Temporal-drift rule set** (`src/lib/conflicts/temporal-rules.ts`): sliding-window checks on `kg_causal_links.observed_at`, out-of-order `enables → leads_to → triggers`, and campaign-timeline monotonicity. Deterministic, ships as rules 8–12.
+- **Layer C2 — Multi-stage / kill-chain graph rule** (`src/lib/conflicts/killchain-rules.ts`): pattern match over `graph_native` for kill-chain jumpers (e.g., `initial_access → impact` with no intermediate stage) and cyclic causality.
+- **Layer C3 — LLM rule-proposal loop** (`supabase/functions/threat-conflicts-mine/index.ts`, new): given a batch of recent `monitoring_events` + validated extractions, Gemini proposes candidate rules in a constrained JSON schema (`when` pattern, `then` violation, `rationale`, `confidence`). Proposals land in a new table `kg_conflict_rule_candidates` (status: `proposed | accepted | rejected`) — human-in-the-loop via a small panel on `KGConstruction.tsx`. Accepted rules are compiled into `src/lib/conflicts/mined-rules.generated.ts` on next build.
+- **Layer C4 — Embedding-based anomaly flag**: cosine distance between a new extraction's edge-set and the historical distribution in `kg_relations`; flags "novel-but-plausible" patterns for review instead of hard-failing. Runs inside `threat-conflicts`.
+- **KG-Bench**: new category `conflict_adaptivity` with 12 gold cases covering time drift + multi-stage jumpers. Bumps `GOLD_VERSION` v2 → v3 (per `pipeline-stage-contracts` cardinal rule).
+- **Report**: `public/reports/conflict-detection-adaptive.md` — rule taxonomy, coverage matrix before/after, C3 mining protocol, and how new threats enter the rulebase (proposal → review → accept → compile).
 
-### PH3 — Parallel conflict rules (Stage 5')
-- `src/lib/conflicts/hyperedge-rules.ts`: R14 (joint validity), R15 (qualifier consistency), R16 (provenance span overlap ≥ 1 token across member triples).
-- `threat-conflicts` accepts `mode: "triples" | "hyperedges"`; pathway C calls it in hyperedge mode.
-- 6 unit tests against existing CTI corpus.
+## 3. Quantitative performance metrics + lightweight baseline
 
-### PH4 — Parallel persistence
-- Migration: `kg_hyperedges (id, kg_id, type, node_ids uuid[], qualifiers jsonb, source_passage text, confidence numeric, pathway text default 'C', created_at)` + GRANTs + RLS (auth read, service write).
-- `kg_pathway_runs (id, report_id, pathway, extraction_ms, conflict_summary jsonb, kg_bench_score jsonb)` to record A/B results per source document.
-- `threat-kg-query` accepts `?pathway=B|C|both` and returns merged or side-by-side results.
+Fills the "no numbers on latency / throughput / cost" gap and adds a real lightweight baseline for resource comparison.
 
-### PH5 — Comparison harness (KG-Bench Cat 10 + Cat 11)
-The **innovation-evidence** step, framed as A/B not augmentation:
-- Cat 10 — **Hyperedge atomicity**: gold hyperedges (SolarWinds, NotPetya, FIN7-Carbanak, Lazarus-3CX, etc., n=10) scored against both pathways. Pathway B is scored via post-hoc `reassembleFromTriples`.
-- Cat 11 — **Explanation cost**: # DB lookups + tokens needed to answer "why is actor X attributed to event Y?" for each pathway. Hypothesis: C ≤ B / 3.
-- Runner: extend `src/lib/kg-bench/runner.ts` with `pathway` axis; persist to `kg_pathway_runs`. Negative results documented, not hidden.
+- **Perf instrumentation** (`src/lib/perf/metrics.ts`, new):
+  - Wraps every Pathway B stage with `performance.now()` → records `stage`, `wall_ms`, `input_tokens`, `output_tokens`, `input_chars`.
+  - Persists to a new table `pipeline_perf_events` (append-only, service-role write, public-read RLS matching `monitoring_events`).
+- **Aggregation queries** (`src/lib/perf/aggregate.ts`): p50 / p95 / p99 latency per stage, end-to-end latency, throughput (samples/min), tokens/sec, cost per sample (using AI Gateway `credits` column already exposed).
+- **Lightweight baseline**: promote the existing deterministic **Rule-Based** extractor in `src/lib/experiment-config.ts` to a full pipeline runner (`src/lib/baselines/rule-based-runner.ts`) that emits the same perf events — gives a real CPU-only, no-LLM reference for the resource-consumption table.
+- **Reporting page**: new tab **Performance** in `src/pages/Experiments.tsx` — table + bar charts of:
+  - Latency (p50/p95/p99) per stage, per pathway, per baseline
+  - Throughput (samples/min) at batch sizes 1, 8, 32
+  - LLM tokens & Lovable-credit cost per sample
+  - Resource ratio: Ours vs Rule-Based (× slower, × more tokens, × more cost)
+- **Report**: `public/reports/performance-and-resource-report.md` — measurement protocol (hardware note: Lovable AI Gateway shared inference, not a local A100 — this is corrected honestly in the doc), tables with mean ± std, and a discussion of when the extra cost is justified by F1 gains from §1.
 
-### PH6 — UI panels (parallel surface)
-Two new panels, both gated by `VITE_HYPERGRAPH_ENABLED`:
-- **`HypergraphPathwayPanel`** on KG Construction page — live side-by-side run: same input, two columns (B vs C), per-stage timing, triple/hyperedge counts, conflict counts.
-- **`PathwayComparisonPanel`** on Experiments page — KG-Bench Cat 10/11 deltas across the corpus, with a verdict badge (C wins / tie / B wins) per metric. Mirrors the §10.2 ablation table style already used.
-- Existing Attribution page gets a thin "view as hyperedges" toggle (re-uses `reassembleFromTriples` when pathway B is active).
+### Technical details
 
-### PH7 — Agent harness wiring (optional, gated on PH5 result)
-- Add `extract_hyper` tool to `threat-agent` so Pathway A (AI-SDK loop) can call either extractor.
-- Skip if PH5 shows no measurable C advantage; document negative result in `mem://features/kg-bench`.
+- All three workstreams share the same corpus expansion (§1) so §2 and §3 numbers are computed on the same 150-sample stratified set → reviewers get consistent N across all tables.
+- Migrations needed:
+  - `pipeline_perf_events` (service_role write, authenticated read, anon read for public demo — matches `monitoring_events` policy).
+  - `kg_conflict_rule_candidates` (service_role write, authenticated read).
+  - Both include `GRANT` blocks per project rule.
+- `GOLD_VERSION` bump v2 → v3 with a one-line changelog in `src/lib/kg-bench/corpus.ts`.
+- No change to Pathway B stage response shapes → `pipeline-stage-contracts` cardinal rule respected; perf events are a side-channel via `performance.now()`, not a new field in stage outputs.
+- Pathway A (agent loop) is instrumented for perf only; still excluded from KG-Bench scoring per `agent-harness` memory.
 
-## What changed vs the previous plan
+### Deliverables checklist
 
-| Aspect | Old (augment) | New (parallel) |
-|---|---|---|
-| Stage 3 prompt | Add Step 4.5 to existing CoT | Separate `HYPEREDGE_COT` in sibling edge function |
-| Conflict rules | Add R14 to R1–R13 | Separate hyperedge rule module, dispatched by mode |
-| Persistence | One `kg_hyperedges` table | Same + `kg_pathway_runs` A/B record |
-| KG-Bench | One new category | Two new categories (atomicity + explanation cost) framed as A/B |
-| UI | One "Event View" toggle | Two dedicated panels for live and corpus-level comparison |
-| Falsifiability | Mixed with current pipeline | **Same input, two pipelines, scored independently** |
+- Code: expanded corpus, `stats.ts`, `temporal-rules.ts`, `killchain-rules.ts`, `threat-conflicts-mine` function, `mined-rules.generated.ts`, `perf/metrics.ts`, `perf/aggregate.ts`, `rule-based-runner.ts`, Performance tab.
+- DB: 2 migrations with GRANTs + RLS.
+- Bench: `GOLD_VERSION` v3, new category `conflict_adaptivity`, CI + significance in output.
+- Docs: three new reports under `public/reports/` (corpus, conflict adaptivity, performance).
 
-## Honest Risks (unchanged from prior plan, restated)
-1. Extraction reliability — schema-constrained decoding + round-trip gate.
-2. Larger blast radius — R14–R16 reject jointly inconsistent hyperedges; confidence floor.
-3. Tooling immaturity — hyperedges remain an index; no Neo4j, no HGNN.
-4. Cost — running both pathways ~2× LLM spend on benchmark days; gate via `pathway="both"` opt-in, default `"B"`.
+### Out of scope (intentionally)
 
-## Out of Scope
-STIX 2.1 replacement, HGNN, new graph DB, clinical hyperedges, real-time dual-write in production paths.
-
-## Deliverable Order
-PH1 ✅ → PH2 → PH3 → (gate: tests green + 1 sample doc roundtrips) → PH4 → PH5 → PH6 → PH7 (conditional).
-
----
-Proceed with **PH2** (sibling `threat-extract-hyper` edge function + `HYPEREDGE_NATIVE_COT_PROMPT` + pipeline-stage entry)?
+- Fine-tuning the Gemini backbone (violates reproducibility per `agent-harness`).
+- Standing up a local A100 / Neo4j cluster — the report will explicitly reframe the deployment as Lovable AI Gateway + Supabase, and cite gateway-measured numbers rather than fabricate on-prem metrics.
+- Full inter-annotator agreement study (Cohen's κ): documented as future work; corpus expansion §1 is single-annotator with a spot-check protocol.

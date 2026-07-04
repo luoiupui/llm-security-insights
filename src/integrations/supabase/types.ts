@@ -91,6 +91,54 @@ export type Database = {
           },
         ]
       }
+      kg_conflict_rule_candidates: {
+        Row: {
+          created_at: string
+          domain: string | null
+          evidence_run_ids: string[] | null
+          id: string
+          llm_confidence: number | null
+          rationale: string
+          reviewer_note: string | null
+          rule_key: string
+          status: string
+          taxonomy: string
+          then_violation: Json
+          updated_at: string
+          when_pattern: Json
+        }
+        Insert: {
+          created_at?: string
+          domain?: string | null
+          evidence_run_ids?: string[] | null
+          id?: string
+          llm_confidence?: number | null
+          rationale: string
+          reviewer_note?: string | null
+          rule_key: string
+          status?: string
+          taxonomy: string
+          then_violation: Json
+          updated_at?: string
+          when_pattern: Json
+        }
+        Update: {
+          created_at?: string
+          domain?: string | null
+          evidence_run_ids?: string[] | null
+          id?: string
+          llm_confidence?: number | null
+          rationale?: string
+          reviewer_note?: string | null
+          rule_key?: string
+          status?: string
+          taxonomy?: string
+          then_violation?: Json
+          updated_at?: string
+          when_pattern?: Json
+        }
+        Relationships: []
+      }
       kg_corroborated_findings: {
         Row: {
           conf_behavioral: number
@@ -390,6 +438,51 @@ export type Database = {
           id?: string
           metadata?: Json | null
           title?: string
+        }
+        Relationships: []
+      }
+      pipeline_perf_events: {
+        Row: {
+          created_at: string
+          domain: string | null
+          id: string
+          input_chars: number | null
+          input_tokens: number | null
+          metadata: Json | null
+          output_tokens: number | null
+          pathway: string
+          run_id: string | null
+          sample_id: string | null
+          stage: string
+          wall_ms: number
+        }
+        Insert: {
+          created_at?: string
+          domain?: string | null
+          id?: string
+          input_chars?: number | null
+          input_tokens?: number | null
+          metadata?: Json | null
+          output_tokens?: number | null
+          pathway: string
+          run_id?: string | null
+          sample_id?: string | null
+          stage: string
+          wall_ms: number
+        }
+        Update: {
+          created_at?: string
+          domain?: string | null
+          id?: string
+          input_chars?: number | null
+          input_tokens?: number | null
+          metadata?: Json | null
+          output_tokens?: number | null
+          pathway?: string
+          run_id?: string | null
+          sample_id?: string | null
+          stage?: string
+          wall_ms?: number
         }
         Relationships: []
       }
