@@ -329,7 +329,7 @@ export default function Experiments() {
           <TabsTrigger value="scale">Scale Effect</TabsTrigger>
           <TabsTrigger value="hallucination">Hallucination Ctrl</TabsTrigger>
           <TabsTrigger value="live">Live Run</TabsTrigger>
-          <TabsTrigger value="smoke">Smoke Test (n=30)</TabsTrigger>
+          <TabsTrigger value="smoke">Smoke Test (n={corpusStats.totalSamples})</TabsTrigger>
           <TabsTrigger value="systest">System Test</TabsTrigger>
           <TabsTrigger value="kgbench">KG-Bench</TabsTrigger>
           <TabsTrigger value="pathway">Pathway B vs C</TabsTrigger>
@@ -716,7 +716,7 @@ export default function Experiments() {
           </Card>
         </TabsContent>
 
-        {/* ── Smoke Test (Acceptance Test, n=30) ── */}
+        {/* ── Smoke Test (Acceptance Test) ── */}
         <TabsContent value="smoke" className="mt-4 space-y-4">
           <Card className="border-warning/30 bg-warning/5">
             <CardContent className="p-3 flex items-start gap-2">

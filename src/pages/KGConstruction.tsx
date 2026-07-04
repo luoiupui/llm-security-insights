@@ -24,6 +24,7 @@ import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel
 import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
 import { DomainBanner } from "@/components/DomainSwitch";
+import { useDomain } from "@/contexts/DomainContext";
 import { AgentLoopPanel } from "@/components/AgentLoopPanel";
 import { MultiModalFusionMock } from "@/components/MultiModalFusionMock";
 import { HypergraphPathwayPanel } from "@/components/HypergraphPathwayPanel";
@@ -89,6 +90,10 @@ export default function KGConstruction() {
   const [reproPreset, setReproPreset] = useState<ReproPreset>(initial.preset);
   const [repro, setRepro] = useState<ReproConfig>(initial.config);
   const pipeline = useThreatPipeline();
+  const { domain } = useDomain();
+  // Corpus is CTI-only in the current build; when the user switches to Clinical,
+  // hide the CTI cases rather than mixing them with a clinical selector.
+  const domainCases = domain === "cti" ? sampleTestCases : [];
 
   // Lazy-load the live feed when user opens the tab
   useEffect(() => {
@@ -570,7 +575,7 @@ export default function KGConstruction() {
           <Tabs value={activeSource} onValueChange={setActiveSource}>
             <TabsList className="bg-secondary/50 flex-wrap h-auto">
               <TabsTrigger value="paste" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Paste text</TabsTrigger>
-              <TabsTrigger value="corpus" className="gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Test corpus (n=30)</TabsTrigger>
+              <TabsTrigger value="corpus" className="gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Test corpus (n={domainCases.length})</TabsTrigger>
               <TabsTrigger value="feed" className="gap-1.5"><Rss className="w-3.5 h-3.5" />Live feed</TabsTrigger>
               <TabsTrigger value="upload" disabled className="gap-1.5 opacity-60"><Upload className="w-3.5 h-3.5" />Upload file</TabsTrigger>
               <TabsTrigger value="api" disabled className="gap-1.5 opacity-60"><Plug className="w-3.5 h-3.5" />External API</TabsTrigger>
@@ -586,26 +591,35 @@ export default function KGConstruction() {
             </TabsContent>
 
             <TabsContent value="corpus" className="mt-3 space-y-2">
-              <Select value={selectedCaseId} onValueChange={handleSelectCase}>
-                <SelectTrigger className="bg-secondary/30">
-                  <SelectValue placeholder={`Select 1 of ${sampleTestCases.length} hand-curated cases…`} />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {sampleTestCases.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs">
-                      <span className="font-mono">{c.id}</span> — {c.source.slice(0, 60)}{c.source.length > 60 ? "…" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Textarea
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                className="min-h-[80px] font-mono text-xs bg-secondary/30"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                The same n=30 corpus drives every experimental unit in the thesis (§2.1). Selecting a case loads its real-world text into the pipeline.
-              </p>
+              {domainCases.length === 0 ? (
+                <div className="p-3 rounded bg-warning/10 border border-warning/30 text-xs text-warning">
+                  The hand-curated test corpus is <strong>CTI-only</strong> in the current build (n={sampleTestCases.length}).
+                  Switch the domain to <strong>CTI</strong> in the header to load cases, or use <strong>Paste text</strong> in Clinical mode.
+                </div>
+              ) : (
+                <>
+                  <Select value={selectedCaseId} onValueChange={handleSelectCase}>
+                    <SelectTrigger className="bg-secondary/30">
+                      <SelectValue placeholder={`Select 1 of ${domainCases.length} hand-curated ${domain.toUpperCase()} cases…`} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {domainCases.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          <span className="font-mono">{c.id}</span> — {c.source.slice(0, 60)}{c.source.length > 60 ? "…" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Textarea
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    className="min-h-[80px] font-mono text-xs bg-secondary/30"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    CTI-only corpus (N={domainCases.length}, pass-1 expansion; target N=150). Selecting a case loads its real-world text into the pipeline.
+                  </p>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="feed" className="mt-3 space-y-2">
@@ -655,7 +669,7 @@ export default function KGConstruction() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Sources: <strong>Paste</strong>, <strong>Test corpus (n=30)</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
+            Sources: <strong>Paste</strong>, <strong>Test corpus (n={domainCases.length})</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
           </p>
         </CardContent>
       </Card>
