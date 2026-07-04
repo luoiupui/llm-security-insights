@@ -1,75 +1,68 @@
+# SOTA benchmarking report for the CTI pipeline
 
-# Address the three reviewer critiques
+Create one new academic-style document that positions this project against the current SOTA in CTI knowledge-graph extraction, calls out where our scale/metrics fall short, and lists concrete upgrades needed before submission. No code changes — this is a research-artefact deliverable, same shape as the existing `issue3-*.md` reports.
 
-Three parallel workstreams, each landing in code + a short academic-style report so the thesis can cite concrete numbers and mechanisms.
+## Deliverable
 
-## 1. Expand the evaluation corpus (30 → ~150 cases + bootstrap CIs)
+**New file:** `public/reports/issue3-sota-benchmark-gap.md`
 
-Goal: replace "N=30 hand-curated" with a stratified corpus large enough for confidence intervals.
+Registered in `public/reports/manifest.json` so it appears in the Reports downloads panel alongside the other issue-3 artefacts.
 
-- **Grow gold corpus** in `src/lib/test-corpus.ts` from 30 → **120–150 samples, CTI-only** (Clinical stratum removed per scope narrowing 2026-07-04), stratified:
-  - 40 CTI atomic (MITRE ATT&CK anchored)
-  - 30 CTI multi-stage / kill-chain (STIX/TAXII, CISA KEV)
-  - 25 CVE-heavy (NVD 2023–2024, incl. Fortinet / Check Point / Ivanti PSIRTs)
-  - 20 ICS / OT advisories (CISA ICS-CERT, Dragos)
-  - 20 Multilingual CTI (10 JA JPCERT/CC + 10 ZH CNCERT / QiAnXin paraphrase)
-  - 15 hard-negative / adversarial (hallucination bait, contradiction, temporal drift)
-  - 15 hypergraph / n-ary events (feeds Cat `fusion_corroboration` + hyperedge scorer)
-- **Statistical reliability layer** in `src/lib/kg-bench/`:
-  - New `stats.ts`: `bootstrapCI(scores, B=1000, α=0.05)`, `mcnemarTest(sysA, sysB)`, `wilsonInterval(p, n)`.
-  - Runner emits per-category F1 **with 95% CI** and pairwise significance (Ours vs LLM-Zeroshot, Ours vs Rule-Based).
-  - Add `k`-fold (k=5) stratified split option so numbers aren't a single point estimate.
-- **UI**: extend `KGBenchPanel.tsx` — show `F1 ± CI`, "n=" per stratum, and a significance badge on the pairwise deltas.
-- **Report**: `public/reports/corpus-expansion-and-statistics.md` — sampling protocol, stratum table, inter-annotator note, bootstrap methodology, and the new headline numbers vs the old N=30 result.
+## Structure of the report
 
-## 2. Adaptive conflict detection (beyond hand-written rules)
+1. **Scope** — CTI IE + KG construction only (not generic OpenIE, not clinical). Task families compared: NER, relation extraction, TTP/technique classification, event/kill-chain extraction, end-to-end KG construction.
 
-Diagnosis first, then layered fix. Keeps the current 7 symbolic rules (they are the reproducible baseline) and adds three adaptive layers on top.
+2. **SOTA reference set** (public, citeable) — for each: task, dataset, size, headline metric.
+   - **DNRTI** (Wang et al., COLING 2020) — 175 reports, 13 entity types, CTI-NER benchmark. SOTA F1 ~0.87 (BERT-CRF family).
+   - **MalwareTextDB / APTNER** (Ge & Xu, 2021; Wang et al., 2022) — APT-focused NER, ~300 docs, F1 ~0.78–0.83.
+   - **TTPDrill / rcATT / SecureBERT-TTP** — MITRE ATT&CK technique classification on Procedure Examples + threat reports; top-1 accuracy 0.60–0.72, top-3 0.80+.
+   - **CASIE** (Satyapanich et al., AAAI 2020) — cyber event extraction, 1000 articles, 5 event types, trigger-F1 ~0.69, argument-F1 ~0.55.
+   - **AttacKG / LADDER / EXTRACTOR / TIM** (2021–2023) — end-to-end attack-graph construction from threat reports; evaluated on 10–1600 reports with recall-oriented metrics on technique linking.
+   - **STIXnet / Open-CyKG / CTI-KG (2023–2024)** — LLM-assisted CTI KG pipelines; typically 200–2000 documents, entity-F1 0.75–0.86, relation-F1 0.55–0.72.
+   - **LLM-era CTI extractors (2024–2025)** — CyberLLMBench, SEvenLLM, CTIBench — thousands of MCQ/QA items plus a few hundred extraction items; report accuracy and F1 with bootstrap CIs.
 
-- **Coverage audit** — script `scripts/audit-conflict-coverage.mjs` that reads every rule in `supabase/functions/threat-conflicts/index.ts` + `src/lib/conflicts/*.ts` and maps it to a taxonomy (temporal, causal, ontological, provenance, cross-modal). Output: `public/reports/conflict-rule-coverage-matrix.md` — explicitly lists uncovered classes (time drift across reports, multi-stage jumper, actor alias flip, TTP-chain shortcut).
-- **Layer C1 — Temporal-drift rule set** (`src/lib/conflicts/temporal-rules.ts`): sliding-window checks on `kg_causal_links.observed_at`, out-of-order `enables → leads_to → triggers`, and campaign-timeline monotonicity. Deterministic, ships as rules 8–12.
-- **Layer C2 — Multi-stage / kill-chain graph rule** (`src/lib/conflicts/killchain-rules.ts`): pattern match over `graph_native` for kill-chain jumpers (e.g., `initial_access → impact` with no intermediate stage) and cyclic causality.
-- **Layer C3 — LLM rule-proposal loop** (`supabase/functions/threat-conflicts-mine/index.ts`, new): given a batch of recent `monitoring_events` + validated extractions, Gemini proposes candidate rules in a constrained JSON schema (`when` pattern, `then` violation, `rationale`, `confidence`). Proposals land in a new table `kg_conflict_rule_candidates` (status: `proposed | accepted | rejected`) — human-in-the-loop via a small panel on `KGConstruction.tsx`. Accepted rules are compiled into `src/lib/conflicts/mined-rules.generated.ts` on next build.
-- **Layer C4 — Embedding-based anomaly flag**: cosine distance between a new extraction's edge-set and the historical distribution in `kg_relations`; flags "novel-but-plausible" patterns for review instead of hard-failing. Runs inside `threat-conflicts`.
-- **KG-Bench**: new category `conflict_adaptivity` with 12 gold cases covering time drift + multi-stage jumpers. Bumps `GOLD_VERSION` v2 → v3 (per `pipeline-stage-contracts` cardinal rule).
-- **Report**: `public/reports/conflict-detection-adaptive.md` — rule taxonomy, coverage matrix before/after, C3 mining protocol, and how new threats enter the rulebase (proposal → review → accept → compile).
+3. **Head-to-head table** — our S4 (N=56, entity-F1 0.83 / relation-F1 0.71 / kill-chain-jumper recall 0.79) placed alongside the SOTA rows above with matching columns (dataset size, task, metric, CI reported yes/no, code released yes/no, fine-tuned vs prompt-only).
 
-## 3. Quantitative performance metrics + lightweight baseline
+4. **Scale gap** — honest statement:
+   - Our N=56 (target 150) is **1–2 orders of magnitude smaller** than DNRTI (175 docs but ~10k entities), CASIE (1000), CTIBench (thousands). Wilson CIs on our numbers are ±0.09; SOTA papers report ±0.02–0.04.
+   - Stratification (7 strata, JA/ZH included) is a genuine differentiator no listed SOTA offers, but it does not substitute for volume.
 
-Fills the "no numbers on latency / throughput / cost" gap and adds a real lightweight baseline for resource comparison.
+5. **Metric gap** — what SOTA reports that we currently don't:
+   - Per-entity-type and per-relation-type F1 (micro + macro).
+   - Trigger-F1 vs argument-F1 split for event extraction (CASIE convention).
+   - Technique-linking Recall@k for ATT&CK mapping (AttacKG / TIM convention).
+   - Inter-annotator agreement (Cohen's κ or Krippendorff's α).
+   - Cross-dataset generalisation (train on A, test on B).
+   - Ablation over each pipeline stage on a fixed test split.
 
-- **Perf instrumentation** (`src/lib/perf/metrics.ts`, new):
-  - Wraps every Pathway B stage with `performance.now()` → records `stage`, `wall_ms`, `input_tokens`, `output_tokens`, `input_chars`.
-  - Persists to a new table `pipeline_perf_events` (append-only, service-role write, public-read RLS matching `monitoring_events`).
-- **Aggregation queries** (`src/lib/perf/aggregate.ts`): p50 / p95 / p99 latency per stage, end-to-end latency, throughput (samples/min), tokens/sec, cost per sample (using AI Gateway `credits` column already exposed).
-- **Lightweight baseline**: promote the existing deterministic **Rule-Based** extractor in `src/lib/experiment-config.ts` to a full pipeline runner (`src/lib/baselines/rule-based-runner.ts`) that emits the same perf events — gives a real CPU-only, no-LLM reference for the resource-consumption table.
-- **Reporting page**: new tab **Performance** in `src/pages/Experiments.tsx` — table + bar charts of:
-  - Latency (p50/p95/p99) per stage, per pathway, per baseline
-  - Throughput (samples/min) at batch sizes 1, 8, 32
-  - LLM tokens & Lovable-credit cost per sample
-  - Resource ratio: Ours vs Rule-Based (× slower, × more tokens, × more cost)
-- **Report**: `public/reports/performance-and-resource-report.md` — measurement protocol (hardware note: Lovable AI Gateway shared inference, not a local A100 — this is corrected honestly in the doc), tables with mean ± std, and a discussion of when the extra cost is justified by F1 gains from §1.
+6. **What our pipeline does that SOTA typically does not** — kept short and honest:
+   - Adaptive conflict layers C1–C4 with zero query-time token cost.
+   - Hybrid HG+KG surface with n-ary event scoring.
+   - Prompt-only reproducibility (no A100, no fine-tune).
+   - Human-in-the-loop mined-rule compilation (C3) that is diffable.
 
-### Technical details
+7. **Upgrades required for an academic-style paper** — prioritised, each with effort estimate:
+   - **P0 (must-fix before submission).** Evaluate on at least one public CTI benchmark (DNRTI or APTNER) end-to-end; report entity-F1 with 95 % CI against the published SOTA number.
+   - **P0.** Expand corpus to N ≥ 150 with the existing stratification; re-report all numbers.
+   - **P1.** Add IAA (double-annotate ≥ 10 % of the corpus; report κ).
+   - **P1.** Add per-type F1 tables and technique-linking Recall@{1,3,5}.
+   - **P1.** Add a fixed-split ablation removing each of C1–C4 in turn.
+   - **P2.** Cross-dataset generalisation run (train-prompt on our corpus, test on DNRTI test split).
+   - **P2.** Fine-tuned LLM comparator (LoRA on SecureBERT or Llama-3-8B) as an upper-bound reference.
+   - **P3.** Pin `gemini-3-flash-preview` version and re-run before camera-ready.
 
-- All three workstreams share the same corpus expansion (§1) so §2 and §3 numbers are computed on the same 150-sample stratified set → reviewers get consistent N across all tables.
-- Migrations needed:
-  - `pipeline_perf_events` (service_role write, authenticated read, anon read for public demo — matches `monitoring_events` policy).
-  - `kg_conflict_rule_candidates` (service_role write, authenticated read).
-  - Both include `GRANT` blocks per project rule.
-- `GOLD_VERSION` bump v2 → v3 with a one-line changelog in `src/lib/kg-bench/corpus.ts`.
-- No change to Pathway B stage response shapes → `pipeline-stage-contracts` cardinal rule respected; perf events are a side-channel via `performance.now()`, not a new field in stage outputs.
-- Pathway A (agent loop) is instrumented for perf only; still excluded from KG-Bench scoring per `agent-harness` memory.
+8. **Bottom-line verdict** — one paragraph:
+   - Our accuracy numbers are **in the SOTA band** on the tasks we measure (entity-F1 0.83 vs SOTA 0.75–0.87; relation-F1 0.71 vs 0.55–0.72), but the **evidence base is not yet SOTA-scale**. The adaptive-layer + zero-token contribution is genuinely novel; the empirical case for it needs the P0 items above before it becomes publishable at a top venue.
 
-### Deliverables checklist
+## Technical details
 
-- Code: expanded corpus, `stats.ts`, `temporal-rules.ts`, `killchain-rules.ts`, `threat-conflicts-mine` function, `mined-rules.generated.ts`, `perf/metrics.ts`, `perf/aggregate.ts`, `rule-based-runner.ts`, Performance tab.
-- DB: 2 migrations with GRANTs + RLS.
-- Bench: `GOLD_VERSION` v3, new category `conflict_adaptivity`, CI + significance in output.
-- Docs: three new reports under `public/reports/` (corpus, conflict adaptivity, performance).
+- Pure Markdown, ~500–700 lines, same formatting conventions as `issue3-comparative-scorecard.md`.
+- All cited SOTA numbers carry a full citation (author, venue, year) so the reviewer can verify without me fabricating figures.
+- No source-code changes; no schema changes; no edge-function changes.
+- `public/reports/manifest.json` gets one new entry.
 
-### Out of scope (intentionally)
+## Out of scope for this task
 
-- Fine-tuning the Gemini backbone (violates reproducibility per `agent-harness`).
-- Standing up a local A100 / Neo4j cluster — the report will explicitly reframe the deployment as Lovable AI Gateway + Supabase, and cite gateway-measured numbers rather than fabricate on-prem metrics.
-- Full inter-annotator agreement study (Cohen's κ): documented as future work; corpus expansion §1 is single-annotator with a spot-check protocol.
+- Actually running our pipeline on DNRTI / APTNER (that is a P0 upgrade item, tracked in the report but not executed here).
+- Corpus expansion from 56 → 150 (separate task).
+- Any UI work (no Performance tab, no Reports panel restyle).
