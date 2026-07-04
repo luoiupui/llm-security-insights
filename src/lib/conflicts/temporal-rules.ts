@@ -32,14 +32,14 @@ export function ruleR8_causalMonotonicity(causal: CausalLink[]): TemporalViolati
   const out: TemporalViolation[] = [];
   const seen = new Map<string, number>();
   for (const link of causal) {
-    const rank = CAUSAL_ORDER[link.type ?? ""] ?? 0;
+    const rank = CAUSAL_ORDER[link.causal_type ?? ""] ?? 0;
     if (!rank) continue;
     const prev = seen.get(link.effect);
     if (prev !== undefined && rank < prev) {
       out.push({
         rule_id: "R8_causal_monotonicity",
         severity: "warning",
-        message: `Causal verb "${link.type}" appears after a stronger verb targeting the same effect "${link.effect}"`,
+        message: `Causal verb "${link.causal_type}" appears after a stronger verb targeting the same effect "${link.effect}"`,
         evidence: link,
       });
     }
