@@ -100,8 +100,12 @@
       "name": "hypergraph-pathway-technical-report.md",
       "bytes": 14773,
       "sha256": "living-doc-pathway-c-ph2-ph3"
+    },
+    {
+      "name": "issue3-sota-benchmark-gap.md",
+      "bytes": 0,
+      "sha256": "issue3-sota-benchmark-gap-v1"
     }
-
   ],
   "stats": {
     "logEntries": 17,
