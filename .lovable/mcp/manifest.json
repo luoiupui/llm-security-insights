@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "sdk_version": "0.23.0",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "threatgraph-mcp",
+      "version": "0.1.0",
+      "title": "ThreatGraph MCP"
+    },
+    "tools": [
+      {
+        "name": "preprocess_text",
+        "title": "Preprocess CTI text",
+        "description": "Clean and defang a CTI passage (URLs, hashes, IPs). Returns cleaned text, detected IOCs, source-type guess and a reliability score. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 10,
+              "description": "Raw CTI passage (report, advisory, blog, etc.)."
+            },
+            "source_type": {
+              "type": "string",
+              "description": "Optional source-type hint (e.g. 'blog', 'advisory', 'report'). Defaults to auto."
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "extract_threats",
+        "title": "Extract CTI knowledge graph (Pathway B)",
+        "description": "Run the deterministic Graph-Native extraction pipeline (Pathway B) on a CTI passage. Returns entities, relations, causal links and STIX-aligned graph metadata. Read-only — does not persist to the KG.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 10,
+              "description": "CTI passage to extract from."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "full",
+                "ner",
+                "re",
+                "causality"
+              ],
+              "description": "Extraction mode. Default 'full'."
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "extract_hyperedges",
+        "title": "Extract hyperedges (Pathway C, CTI only)",
+        "description": "Run the hyperedge-native extractor (Pathway C) on a CTI passage. Preserves n-ary events (kill-chains, campaigns, fusion findings) as first-class hyperedges plus a derived triple projection. Preferred when ≥3 participants share a single event. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 10,
+              "description": "CTI passage to extract from."
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "query_threat_kg",
+        "title": "Query ThreatGraph KG (attribution / attack path)",
+        "description": "Attribute a threat actor or reconstruct an attack path from an extracted graph. Supply entities/relations/causal_links from `extract_threats` (or an equivalent shape). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "default": "Identify the threat actor and reconstruct the attack chain",
+              "description": "Natural-language question, e.g. 'which actor is behind this campaign?'."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "attribute",
+                "attack_path"
+              ],
+              "default": "attribute"
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "default": [],
+              "description": "Entities from extract_threats.ner.entities."
+            },
+            "relations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "default": [],
+              "description": "Relations from extract_threats.re.relations."
+            },
+            "causal_links": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "default": [],
+              "description": "Causal links from extract_threats.causality.causal_links."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_recent_reports",
+        "title": "List recent ingested CTI reports",
+        "description": "Return the most recent CTI reports already ingested into ThreatGraph (id, summary, source_type, created_at). Reads through the anon role — only rows RLS exposes publicly are returned.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10,
+              "description": "Max rows (1–50)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
