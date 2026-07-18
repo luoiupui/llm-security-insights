@@ -1,91 +1,168 @@
-## Deliverable
 
-One new research memo: `public/reports/issue3-n1000-impact-analysis.md`, plus a one-line entry in `public/reports/manifest.json`. No code, schema, edge-function, or UI changes.
+# Phase N1K — Scale the CTI corpus from 56 → 1,000 via public sources
 
-Answers three questions the reviewer will ask:
-1. What is *currently* implemented (ground truth, N=56)?
-2. If we scale to N=1,000, what is the compute-cost impact?
-3. Does N=1,000 force any change to algorithms or pipeline architecture?
+Goal: bring the ThreatGraph corpus from N=56 to N≥1,000 by ingesting real public CTI documents, with every case carrying an auditable **source citation** (feed, URL, publisher, retrieval date, license), and drive extraction through a **fan-out / worker / reduce** runner controllable from the GUI.
 
-## Structure of the memo
+Scope: CTI-only. Clinical mode untouched. Pipeline stages (Pathway B) untouched — this phase adds an ingestion + orchestration layer *around* them.
 
-### 1. Current status snapshot (N=56, shipped)
-- Corpus: **N=56 CTI samples**, 7 strata, entity density ~19 ent/doc, ~1,060 entities total — source `src/lib/kg-bench/corpus.ts` / `src/lib/test-corpus.ts`, `corpusStats` computed at import.
-- Pipelines actually running against N=56:
-  - Pathway B (deterministic 7-stage) — `threat-preprocess → threat-rag → threat-extract → kb-validate → threat-conflicts → threat-kg-query → persist`
-  - Pathway A (agent loop) — `threat-agent` with `stopWhen(stepCountIs(50))`
-  - Pathway C (hypergraph) — `threat-extract-hyper`
-- Statistics layer: `bootstrapCI`, `wilsonInterval`, `mcnemarTest`, `stratifiedKFold` in `src/lib/kg-bench/stats.ts` — deployed but reporting ±0.09 CI at n=56.
-- N=200 / N=500 / N=1,000 are **planned only** in `issue3-corpus-scaleup-feasibility.md`; not ingested, not annotated, not scored.
+---
 
-### 2. Compute-cost impact of N=1,000 (18× scale-up)
+## 1. Public sources (each case's `source_ref` is mandatory, never inferred)
 
-Per-doc cost budget (measured on Pathway B, gemini-3-flash-preview):
+| Source | Feed | Volume target | Format | License note |
+|---|---|---:|---|---|
+| **CISA KEV** | `known_exploited_vulnerabilities.json` (already wired in `cisa-advisories-ingest`) | 300 | JSON | US-Gov public domain |
+| **CISA ICS advisories** | RSS + HTML detail pages | 150 | HTML | US-Gov public domain |
+| **MITRE ATT&CK Groups** | `enterprise-attack.json` `intrusion-set` narratives (already in `kb-ingest`) | 150 | STIX 2.1 | Apache-2.0 |
+| **JPCERT/CC advisories** | `jpcert.or.jp/english/at/*.rss` | 120 | RSS+HTML | attribution required, stored in `source_ref.license` |
+| **CNCERT/CC bulletins** | `cert.org.cn` weekly bulletins | 100 | HTML (ZH) | attribution required |
+| **Vendor PSIRTs** (Cisco, Microsoft MSRC, Fortinet, Palo Alto, Ivanti) | vendor RSS feeds | 180 | RSS+HTML | vendor terms — quote-only |
+| **Total** | | **≈1,000** | | |
 
-| Stage | LLM calls/doc | ~Tokens in/out | ~Latency/doc |
-|---|---|---|---|
-| threat-preprocess | 0 (deterministic) | — | ~50 ms |
-| threat-rag | 1 embedding + retrieval | 2k in | ~400 ms |
-| threat-extract (8-step CoT) | 1 | ~4k in / ~2k out | ~4–7 s |
-| kb-validate | 0 | — | ~30 ms |
-| threat-conflicts | 0 (symbolic) + C1–C4 (spec) | — | ~80 ms |
-| threat-kg-query | 0 | — | persist only |
-| **Total per doc (B)** | **~1 LLM + 1 embedding** | **~6k tokens** | **~5–8 s** |
+Each source has a dedicated adapter in `supabase/functions/corpus-ingest-<src>/` that:
+1. fetches the feed,
+2. deduplicates against `bench_cases.source_url`,
+3. normalizes into a common `IngestRecord` shape, and
+4. inserts into a new `bench_cases` table (below).
 
-Scaled linearly:
+---
 
-| N | Pathway-B LLM calls | Tokens | Wall time (serial) | Wall time (10× parallel) | Rough gateway credit cost |
-|---:|---:|---:|---:|---:|---:|
-| 56 (now) | 56 | ~340k | ~7 min | ~45 s | baseline |
-| 500 (Tier-2) | 500 | ~3.0M | ~65 min | ~7 min | ~9× |
-| **1,000 (Tier-3)** | **1,000** | **~6.0M** | **~2.2 h** | **~13 min** | **~18×** |
+## 2. New schema (migration)
 
-Multi-run overhead:
-- Pathway A (agent loop, avg ~6 steps/case observed) ⇒ ×6 LLM calls per doc when scored ⇒ N=1,000 on A alone ≈ 6,000 calls / ~30M tokens.
-- 5-fold stratified CV ×3 systems (Ours / LLM-zeroshot / Rule-based baseline) ⇒ another ×15 multiplier over the headline number.
-- Full paper-grade run at N=1,000 (all three pathways × 5-fold × 3 comparators) ≈ **0.5–1.0 B tokens gateway spend** — the dominant cost line, not annotation.
+```sql
+-- one row per ingested public CTI document
+create table public.bench_cases (
+  id uuid primary key default gen_random_uuid(),
+  source_feed text not null,             -- 'cisa_kev' | 'mitre_group' | 'jpcert' | ...
+  source_url  text not null,             -- canonical URL
+  publisher   text not null,             -- 'CISA' | 'JPCERT/CC' | 'Cisco PSIRT' | ...
+  license     text not null,             -- 'US-Gov PD' | 'Apache-2.0' | 'vendor-quote-only'
+  retrieved_at timestamptz not null default now(),
+  language    text not null default 'en',
+  stratum     text not null,             -- 'kev' | 'ics' | 'apt-narrative' | 'psirt' | 'multilingual'
+  raw_text    text not null,
+  title       text,
+  metadata    jsonb not null default '{}'::jsonb,
+  unique (source_feed, source_url)
+);
 
-Storage/DB impact:
-- `threat_reports` + KG tables grow ~18×: from ~1k entities → ~35k entities / ~50k relations / ~10k hyperedges. Well within Postgres single-instance limits; no schema change required.
-- Bench artefacts (per-run JSON) at ~50 KB/doc ⇒ ~50 MB per full run. Trivial.
+-- one row per (case, pathway, run) — supports fan-out/worker/reduce
+create table public.bench_runs (
+  id uuid primary key default gen_random_uuid(),
+  run_batch uuid not null,               -- groups a whole N=1000 sweep
+  case_id   uuid not null references public.bench_cases(id) on delete cascade,
+  pathway   text not null check (pathway in ('B','C')),
+  status    text not null default 'queued' check (status in ('queued','running','done','error')),
+  started_at timestamptz,
+  finished_at timestamptz,
+  metrics   jsonb,                        -- {precision,recall,f1,latency_ms,tokens_in,tokens_out}
+  error     text
+);
+```
+Both tables get GRANTs per the public-schema rule; RLS: public read, service-role write. `bench_cases` is append-only via edge function only.
 
-Annotation cost (from feasibility memo, kept for completeness): ~6 person-weeks single-annotator, ~2.5 weeks with weak-supervision bootstrap using `threat-extract` silver labels.
+---
 
-### 3. Algorithm & architecture impact — what breaks, what doesn't
+## 3. Fan-out / worker / reduce runner
 
-**Does NOT change** (green):
-- Ontology (`src/lib/ontology/{cti,hypergraph,corroborated-finding}.ts`) — schemas are N-independent.
-- Deterministic pipeline stages — pure per-doc functions, embarrassingly parallel.
-- Statistics layer — designed for arbitrary N; only the CI narrows.
-- Prompt design (8-step CoT) — token cost per doc unchanged.
-- Domain switch, redaction, privacy/FL simulation surfaces.
+Three new edge functions, each a small wrapper around existing stages — **no pipeline changes**:
 
-**Needs tuning** (yellow):
-- **Runner concurrency** (`src/lib/kg-bench/runner.ts`) — currently serial-friendly. At N=1,000 add a bounded concurrency (p-limit ≈ 8–16) to keep gateway rate-limit headroom.
-- **Edge-function timeouts** — Supabase edge functions cap ~150 s/invocation. Already per-doc, so N doesn't matter, but a "run whole benchmark" wrapper must chunk (batches of 50–100) and checkpoint to `bench_runs` rather than one long call.
-- **RAG index size** — MITRE/CVE KB retrieval currently linear-scan on ~1.5k procedure examples. At corpus N=1,000 the KB itself doesn't grow, but recall/precision at k=8 may saturate → consider switching from cosine over in-memory to pgvector HNSW (already available in Lovable Cloud) if p95 retrieval > 500 ms.
-- **Conflict-rule cost** — `hyperedge-rules.ts` and `mined-rules.generated.ts` are O(edges²) in worst case. At ~50k relations the pairwise sweep is ~2.5 B comparisons — needs the existing bucketed index on `(subject, predicate)` to be enforced; already present but currently opt-in.
-- **Adaptive layers C1–C4** — currently `Spec` maturity in `implementation-roadmap.md`. Live wiring becomes *more* valuable at N=1,000 (more conflict signal to learn from) but is not a blocker.
+```text
+POST /bench-schedule       (fan-out)
+   ├─ inputs:  { batch_size, pathways: ["B"|"C"], strata?: [...] }
+   ├─ actions: pick N cases from bench_cases, insert queued rows into bench_runs,
+   │           enqueue in chunks of 20 via EdgeRuntime.waitUntil → bench-worker
+   └─ output:  { run_batch, queued: N }
 
-**Genuine architectural changes required** (red — only if we go to N=1,000 with full comparator matrix):
-- **Bench orchestration** must move from "one HTTP call runs the whole thing" to a job/queue pattern: `bench-schedule` (fan-out) → `bench-worker` (per-shard) → `bench-aggregate` (reduce). Same edge-function set, new coordinator. This is the *only* item that touches architecture, and it's a small addition, not a refactor of the pipeline.
-- **Result storage** should move from `localStorage`-cached per-run JSON to a `bench_runs` / `bench_items` table with RLS, so long runs survive tab close. Schema is 2 tables + GRANTs.
-- **Cost governance** — a per-run token budget cap and a dry-run mode (sample 10 % first), added in the runner, not in the pipeline.
+POST /bench-worker         (per-chunk, isolated 150s budget)
+   ├─ picks 20 queued rows, calls existing threat-preprocess → extract → kb-validate
+   │  → threat-conflicts → threat-kg-query (Pathway B) OR threat-extract-hyper (Pathway C)
+   ├─ writes metrics + latency + token counts into bench_runs
+   └─ emits monitoring_events for progress
 
-**Not required at N=1,000**:
-- No new model. Gemini-3-Flash still fits the token/doc budget.
-- No fine-tuning. LoRA upper-bound stays a *post-thesis* P2 item.
-- No change to the two-pathways-one-backbone core thesis.
+POST /bench-aggregate      (reduce)
+   ├─ groups by run_batch, pathway, stratum
+   └─ returns aggregate P/R/F1, Wilson CIs (reuse src/lib/kg-bench/stats.ts),
+      per-stratum breakdown, cost totals
+```
 
-### 4. Recommendation
-- Stay on **N=500 as the paper target** (already the recommendation in `issue3-corpus-scaleup-feasibility.md`) — clears entity-count parity with DNRTI, doc-count parity with CASIE, at ~½ the compute and annotation cost of N=1,000, with no architectural changes needed.
-- If reviewers explicitly require N=1,000, the *only* architectural work is the bench orchestration (schedule/worker/aggregate) + a `bench_runs` table. Pipeline stages, ontology, prompts, and stats layer are untouched.
+Concurrency knob: `p-limit = 8` per worker to stay inside gateway rate limits. Checkpointing is implicit (state lives in `bench_runs`), so a killed worker resumes cleanly.
 
-### 5. Cross-refs
-Link back to `issue3-corpus-scaleup-feasibility.md`, `issue3-sota-benchmark-gap.md`, `implementation-roadmap.md`, `performance-and-resource-report.md`, `corpus-expansion-and-statistics.md`.
+---
 
-### 6. Manifest entry
-Append one row to `public/reports/manifest.json` pointing at the new memo, category `issue3`.
+## 4. GUI — new panel on the Experiments page
 
-## Out of scope
-No code, no schema, no UI, no ingestion. Pure research memo answering the compute/architecture question so it can be cited from the thesis defence.
+New component `src/components/CorpusIngestPanel.tsx` (CTI-only, gated by `DomainContext`). Layout:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Corpus Ingest & Bench Runner            [CTI · Experiment] │
+├─────────────────────────────────────────────────────────────┤
+│  1. INGEST                                                  │
+│     ┌───────────────┬──────────┬───────────┬─────────────┐  │
+│     │ Source         │ In DB    │ Feed size │ Action      │  │
+│     ├───────────────┼──────────┼───────────┼─────────────┤  │
+│     │ CISA KEV       │ 87 / 300 │ 1,247     │ [Fetch 50]  │  │
+│     │ JPCERT/CC      │  0 / 120 │   ~800    │ [Fetch 50]  │  │
+│     │ CNCERT/CC      │  0 / 100 │   ~500    │ [Fetch 30]  │  │
+│     │ MITRE Groups   │ 42 / 150 │   163     │ [Fetch all] │  │
+│     │ Vendor PSIRTs  │  0 / 180 │   ~2,000  │ [Fetch 40]  │  │
+│     └───────────────┴──────────┴───────────┴─────────────┘  │
+│     Total: 129 / 1000                          ▓▓░░░░ 13%   │
+├─────────────────────────────────────────────────────────────┤
+│  2. RUN BENCH  (Pathway B ▣  Pathway C ▢)                   │
+│     Sample: [ All | Stratified 200 | Custom __ ]            │
+│     [Start Run]  → run_batch=b7f2…  · 172 queued            │
+│                                                             │
+│  3. LIVE STATUS (auto-refresh)                              │
+│     queued 40  · running 8  · done 118  · error 6           │
+│     ETA ~4 min · tokens 0.42 M · $ est. n/a (gateway)       │
+│                                                             │
+│  4. RESULTS                                                 │
+│     Pathway B — F1 0.71 ± 0.03 (Wilson 95%)                 │
+│     Per-stratum table · [Download JSON] [Download CSV]      │
+├─────────────────────────────────────────────────────────────┤
+│  Every case card shows: publisher · feed · URL · retrieved  │
+│  · license — clickable to the original source.              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Operation workflow (documented on the panel itself):
+
+1. **Ingest** — click *Fetch N* per source; adapter runs in background, monitoring events stream into the existing Threat Feed.
+2. **Verify** — dedup + attribution check runs automatically; any case missing `source_url` or `license` is rejected.
+3. **Schedule** — pick pathway(s) and sample size, click *Start Run*. This calls `bench-schedule`.
+4. **Watch** — the Live Status block polls `bench_runs` counts every 3 s.
+5. **Aggregate** — when `queued+running = 0`, the panel calls `bench-aggregate` and renders the results block with per-stratum F1 + Wilson CI.
+6. **Export** — download JSON/CSV of the full run for the paper appendix.
+
+The existing `KG Construction` page also gets a small "Corpus source" badge under each dropdown entry showing `publisher · retrieved YYYY-MM-DD`, so a demo user always sees where a case came from.
+
+---
+
+## 5. Report updates
+
+- **New**: `public/reports/n1000-ingest-runbook.md` — lists every source, adapter, license, dedup key, and the exact GUI workflow above (this doc is what reviewers cite).
+- **Updated**: `public/reports/issue3-n1000-impact-analysis.md` §3.3 — mark "bench orchestration" and "persistent run store" as **implemented**, with links to `bench-schedule/worker/aggregate` and the `bench_runs` schema.
+- **Updated**: `public/reports/implementation-roadmap.md` — add Phase N1K row (status: Beta once first 200 cases land, GA at ≥1,000).
+- Add Mermaid figure `/mnt/documents/n1000_fanout_flow.mmd` illustrating schedule → worker×k → aggregate.
+
+---
+
+## 6. Deliverables & sequencing
+
+1. Migration: `bench_cases` + `bench_runs` (+ GRANTs, RLS).
+2. Edge functions: `corpus-ingest-cisa-kev` (refactor of existing), `-jpcert`, `-cncert`, `-mitre-groups`, `-psirt-rss`.
+3. Edge functions: `bench-schedule`, `bench-worker`, `bench-aggregate`.
+4. Frontend: `CorpusIngestPanel.tsx` mounted on `Experiments` page; source-badge tweak in `KGConstruction.tsx`.
+5. Reports: runbook + roadmap + impact-analysis §3.3 update + mermaid.
+6. Smoke run: fetch 50 KEV + 20 JPCERT, execute Pathway B, verify aggregated F1 lands with CI.
+
+## 7. Explicitly *not* in this phase
+
+- No changes to pipeline stages, prompts, or ontologies.
+- No fine-tuning, no new backbone model.
+- Human adjudication of silver labels is deferred to a follow-up "gold expansion" phase; N1K runs against the existing gold slice for scoring, with silver labels persisted for later review.
+- Clinical corpus untouched.
+
+Approve this plan and I'll ship it in the order listed.
