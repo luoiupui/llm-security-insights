@@ -99,18 +99,17 @@ Colour-coded by required action.
 - **Conflict-rule cost** — `hyperedge-rules.ts` and `mined-rules.generated.ts` are worst-case O(edges²). At ~50 k relations that is ~2.5 B pairwise comparisons if run naively → enforce the existing bucketed `(subject, predicate)` index (present but opt-in today).
 - **Adaptive C1–C4** — becomes *more* useful at N=1,000 (more conflict signal to learn from), but not a blocker; still tracked as its own roadmap item.
 
-### 3.3 RED — genuine architectural additions (only if the full N=1,000 matrix is required)
+### 3.3 RED — genuine architectural additions (SHIPPED in Phase N1K, 2026-07-18)
 
-None of these change the pipeline itself — they wrap it.
+None of these change the pipeline itself — they wrap it. **Status updated: all three items below are now implemented** as of Phase N1K. See `n1000-ingest-runbook.md` and `/mnt/documents/n1000_fanout_flow.mmd`.
 
-1. **Bench orchestration → fan-out / worker / reduce.**
-   Replace the single "run the whole benchmark" HTTP call with:
-   `bench-schedule` (fan-out shards) → `bench-worker` (per-shard, calls existing stages) → `bench-aggregate` (reduce metrics).
-   Same edge functions, new coordinator layer. Small addition, not a refactor.
-2. **Persistent run store.**
-   Move from `localStorage`-cached per-run JSON to `bench_runs` / `bench_items` tables with RLS + GRANTs, so a 2-hour run survives tab close.
-3. **Cost governance.**
-   Per-run token-budget cap + a dry-run mode (10 % sample first). Lives in the runner, not in the pipeline.
+1. **Bench orchestration → fan-out / worker / reduce.** ✅ Implemented.
+   `bench-schedule` (fan-out) → `bench-worker` (per-chunk, concurrency 4, chained continuation) → `bench-aggregate` (reduce). Same pipeline stages under the hood.
+2. **Persistent run store.** ✅ Implemented.
+   Tables `public.bench_cases` (attribution-mandatory catalog) + `public.bench_runs` (per case × pathway status + metrics). Runs survive tab close and worker restarts — state is entirely in Postgres.
+3. **Cost governance.** ⚠ Partial.
+   Concurrency cap (4 × 10 in-flight workers ≈ 40 effective parallelism) is enforced. Per-run token-budget cap and dry-run 10 % sample mode remain a follow-up item — trivial to add in `bench-schedule`.
+
 
 ### 3.4 NOT required at N=1,000
 

@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ReportDownloads } from "@/components/ReportDownloads";
 import { KGBenchPanel } from "@/components/KGBenchPanel";
 import { PathwayComparisonPanel } from "@/components/PathwayComparisonPanel";
+import { CorpusIngestPanel } from "@/components/CorpusIngestPanel";
 
 const chartStyle = {
   background: "hsl(220, 18%, 10%)",
@@ -333,6 +334,7 @@ export default function Experiments() {
           <TabsTrigger value="systest">System Test</TabsTrigger>
           <TabsTrigger value="kgbench">KG-Bench</TabsTrigger>
           <TabsTrigger value="pathway">Pathway B vs C</TabsTrigger>
+          <TabsTrigger value="corpus">Corpus N1K</TabsTrigger>
         </TabsList>
 
         <TabsContent value="kgbench" className="mt-4">
@@ -341,6 +343,10 @@ export default function Experiments() {
 
         <TabsContent value="pathway" className="mt-4">
           <PathwayComparisonPanel />
+        </TabsContent>
+
+        <TabsContent value="corpus" className="mt-4">
+          <CorpusIngestPanel />
         </TabsContent>
 
 

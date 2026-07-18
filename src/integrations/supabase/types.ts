@@ -14,6 +14,101 @@ export type Database = {
   }
   public: {
     Tables: {
+      bench_cases: {
+        Row: {
+          created_at: string
+          id: string
+          language: string
+          license: string
+          metadata: Json
+          publisher: string
+          raw_text: string
+          retrieved_at: string
+          source_feed: string
+          source_url: string
+          stratum: string
+          title: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          language?: string
+          license: string
+          metadata?: Json
+          publisher: string
+          raw_text: string
+          retrieved_at?: string
+          source_feed: string
+          source_url: string
+          stratum: string
+          title?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          language?: string
+          license?: string
+          metadata?: Json
+          publisher?: string
+          raw_text?: string
+          retrieved_at?: string
+          source_feed?: string
+          source_url?: string
+          stratum?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
+      bench_runs: {
+        Row: {
+          case_id: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          metrics: Json | null
+          pathway: string
+          run_batch: string
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          metrics?: Json | null
+          pathway: string
+          run_batch: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          metrics?: Json | null
+          pathway?: string
+          run_batch?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bench_runs_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "bench_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kb_entries: {
         Row: {
           created_at: string
