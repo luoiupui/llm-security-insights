@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ReportDownloads } from "@/components/ReportDownloads";
 import { KGBenchPanel } from "@/components/KGBenchPanel";
 import { PathwayComparisonPanel } from "@/components/PathwayComparisonPanel";
+import { CorpusIngestPanel } from "@/components/CorpusIngestPanel";
 
 const chartStyle = {
   background: "hsl(220, 18%, 10%)",
