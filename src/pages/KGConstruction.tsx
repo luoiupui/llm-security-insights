@@ -81,6 +81,9 @@ export default function KGConstruction() {
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
   const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
+  const [n1kRows, setN1kRows] = useState<Array<{ id: string; title: string | null; source_feed: string; publisher: string | null; raw_text: string }>>([]);
+  const [n1kLoading, setN1kLoading] = useState(false);
+  const [n1kTotal, setN1kTotal] = useState<number | null>(null);
   const [ingesting, setIngesting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
   const [viewMode, setViewMode] = useState<"force" | "timeline">("force");
