@@ -114,6 +114,21 @@ export default function KGConstruction() {
       });
   }, [activeSource, feedRows.length]);
 
+  // Lazy-load N1K bench_cases when user opens that tab
+  useEffect(() => {
+    if (activeSource !== "n1k" || n1kRows.length > 0) return;
+    setN1kLoading(true);
+    Promise.all([
+      supabase.from("bench_cases").select("id,title,source_feed,publisher,raw_text").order("created_at", { ascending: false }).limit(50),
+      supabase.from("bench_cases").select("*", { count: "exact", head: true }),
+    ]).then(([rows, count]) => {
+      if (rows.error) toast.error(`N1K load failed: ${rows.error.message}`);
+      else setN1kRows((rows.data ?? []) as any);
+      setN1kTotal(count.count ?? 0);
+      setN1kLoading(false);
+    });
+  }, [activeSource, n1kRows.length]);
+
   const handleSelectCase = (id: string) => {
     setSelectedCaseId(id);
     const tc = sampleTestCases.find((c) => c.id === id);
