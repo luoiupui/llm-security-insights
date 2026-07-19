@@ -101,3 +101,25 @@ Reproduces the projection from `issue3-n1000-impact-analysis.md` §2:
 | Aggregate (reduce)| `supabase/functions/bench-aggregate/index.ts`                   |
 | GUI panel        | `src/components/CorpusIngestPanel.tsx` (Experiments → Corpus N1K)|
 | Mermaid          | `/mnt/documents/n1000_fanout_flow.mmd`                           |
+
+---
+
+## Appendix A — Two-corpus model (why the KG Construction dropdown still shows n=56)
+
+The project intentionally maintains **two disjoint corpora**. They are not merged, and the KG Construction "Curated corpus" dropdown never queries the N1K store.
+
+| # | Store                       | Location                                   | Size    | Gold labels | Consumers                                                        |
+|---|-----------------------------|--------------------------------------------|---------|-------------|------------------------------------------------------------------|
+| 1 | **Curated eval corpus**     | `src/lib/test-corpus.ts` (bundled)         | n = 56  | Yes         | KG-Bench scorers (P/R/F1); KG Construction paste-dropdown        |
+| 2 | **N1K ingest corpus**       | `bench_cases` table (Lovable Cloud DB)     | ≥ 1,000 | No          | `bench-schedule` → `bench-worker` → `bench-runs` → `bench-aggregate` |
+
+### Which button sequence to use
+
+- **Single-case demo / gold-scored run** (KG Construction page): pick from *Curated corpus* dropdown or paste text → **Extract, Validate & Persist to KG** → optionally **Refresh KB** (only after MITRE/KEV updates) → **Bootstrap GraphRAG Corpus** (once, after ≥20 cases persisted). Do NOT loop this manually across 1,000 rows.
+- **N ≥ 1,000 batch run** (Experiments → Corpus Ingest): (1) click ingest source buttons to populate `bench_cases`, (2) **Schedule batch** to fan out into `bench_runs`, (3) **Run workers** with concurrency limit, (4) **Aggregate** to write metrics. This is the correct large-scale path.
+
+### GUI change (build tag 2026-07-19)
+
+- KG Construction dropdown label renamed from `Test corpus (n=56)` → `Curated corpus (n=56, gold)`.
+- New **N1K batch (bench_cases)** tab added for single-case inspection of ingested cases, with a deep-link to Experiments → Corpus Ingest for the batch runner.
+- Added a "Two-corpus model" callout above the action buttons so operators pick the right path.

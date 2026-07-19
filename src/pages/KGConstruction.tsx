@@ -81,6 +81,9 @@ export default function KGConstruction() {
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
   const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
+  const [n1kRows, setN1kRows] = useState<Array<{ id: string; title: string | null; source_feed: string; publisher: string | null; raw_text: string }>>([]);
+  const [n1kLoading, setN1kLoading] = useState(false);
+  const [n1kTotal, setN1kTotal] = useState<number | null>(null);
   const [ingesting, setIngesting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
   const [viewMode, setViewMode] = useState<"force" | "timeline">("force");
@@ -110,6 +113,21 @@ export default function KGConstruction() {
         setFeedLoading(false);
       });
   }, [activeSource, feedRows.length]);
+
+  // Lazy-load N1K bench_cases when user opens that tab
+  useEffect(() => {
+    if (activeSource !== "n1k" || n1kRows.length > 0) return;
+    setN1kLoading(true);
+    Promise.all([
+      supabase.from("bench_cases").select("id,title,source_feed,publisher,raw_text").order("created_at", { ascending: false }).limit(50),
+      supabase.from("bench_cases").select("*", { count: "exact", head: true }),
+    ]).then(([rows, count]) => {
+      if (rows.error) toast.error(`N1K load failed: ${rows.error.message}`);
+      else setN1kRows((rows.data ?? []) as any);
+      setN1kTotal(count.count ?? 0);
+      setN1kLoading(false);
+    });
+  }, [activeSource, n1kRows.length]);
 
   const handleSelectCase = (id: string) => {
     setSelectedCaseId(id);
@@ -610,7 +628,8 @@ export default function KGConstruction() {
           <Tabs value={activeSource} onValueChange={setActiveSource}>
             <TabsList className="bg-secondary/50 flex-wrap h-auto">
               <TabsTrigger value="paste" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Paste text</TabsTrigger>
-              <TabsTrigger value="corpus" className="gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Test corpus (n={domainCases.length})</TabsTrigger>
+              <TabsTrigger value="corpus" className="gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Curated corpus (n={domainCases.length}, gold)</TabsTrigger>
+              <TabsTrigger value="n1k" className="gap-1.5"><Database className="w-3.5 h-3.5" />N1K batch (bench_cases)</TabsTrigger>
               <TabsTrigger value="feed" className="gap-1.5"><Rss className="w-3.5 h-3.5" />Live feed</TabsTrigger>
               <TabsTrigger value="upload" disabled className="gap-1.5 opacity-60"><Upload className="w-3.5 h-3.5" />Upload file</TabsTrigger>
               <TabsTrigger value="api" disabled className="gap-1.5 opacity-60"><Plug className="w-3.5 h-3.5" />External API</TabsTrigger>
@@ -657,6 +676,48 @@ export default function KGConstruction() {
               )}
             </TabsContent>
 
+            <TabsContent value="n1k" className="mt-3 space-y-2">
+              <div className="p-2 rounded bg-info/10 border border-info/30 text-[11px] text-info-foreground/90">
+                <strong>N1K batch corpus</strong> — bulk-ingested documents from CISA KEV, MITRE ATT&amp;CK Groups, JPCERT/CC, CNCERT, vendor PSIRTs with mandatory attribution.
+                Separate from the {domainCases.length}-case gold-labelled curated corpus above.
+                For full 1,000-case fan-out runs, use <Link to="/experiments" className="underline">Experiments → Corpus Ingest</Link>.
+                This tab is for <em>single-case inspection</em>: load one row into the pipeline below.
+              </div>
+              {n1kLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground p-3"><Loader2 className="w-3 h-3 animate-spin" />Loading bench_cases…</div>
+              ) : n1kTotal === 0 ? (
+                <div className="p-3 rounded bg-warning/10 border border-warning/30 text-xs text-warning">
+                  <strong>bench_cases is empty.</strong> Go to <Link to="/experiments" className="underline font-mono">Experiments → Corpus Ingest</Link> and click <em>Ingest CISA KEV</em> or <em>Ingest MITRE Groups</em> to populate it.
+                </div>
+              ) : (
+                <>
+                  <div className="text-[11px] text-muted-foreground">
+                    Showing latest {n1kRows.length} of <strong className="text-foreground">{n1kTotal}</strong> ingested cases.
+                  </div>
+                  <div className="space-y-1.5 max-h-64 overflow-auto">
+                    {n1kRows.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => { setInputText(r.raw_text); toast.success(`Loaded ${r.source_feed} case`); }}
+                        className="w-full text-left p-2 rounded bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <Badge variant="outline" className="text-[10px] font-mono">{r.source_feed}</Badge>
+                          <span className="text-muted-foreground">{r.publisher ?? "—"}</span>
+                        </div>
+                        <div className="text-xs text-foreground/80 line-clamp-2 mt-1 font-mono">{(r.title ?? r.raw_text).slice(0, 200)}…</div>
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    className="min-h-[80px] font-mono text-xs bg-secondary/30"
+                  />
+                </>
+              )}
+            </TabsContent>
+
             <TabsContent value="feed" className="mt-3 space-y-2">
               {feedLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground p-3"><Loader2 className="w-3 h-3 animate-spin" />Loading recent reports…</div>
@@ -690,6 +751,15 @@ export default function KGConstruction() {
             </TabsContent>
           </Tabs>
 
+          <div className="p-3 rounded border border-primary/30 bg-primary/5 text-[11px] space-y-1.5">
+            <div className="font-semibold text-foreground text-xs flex items-center gap-1.5"><Workflow className="w-3.5 h-3.5" />Two-corpus model — which path do you want?</div>
+            <div><strong>Single case (this panel):</strong> pick from <em>Curated corpus (n={domainCases.length}, gold)</em>, <em>N1K batch</em>, <em>Live feed</em>, or paste text →
+              <span className="font-mono"> Extract, Validate &amp; Persist to KG</span> →
+              <span className="font-mono"> Refresh KB</span> (only after MITRE/KEV updates) →
+              <span className="font-mono"> Bootstrap GraphRAG Corpus</span> (once, after ~20+ cases persisted). Per-document, gold-scored via KG-Bench.</div>
+            <div><strong>N≥1,000 batch:</strong> not this panel — go to <Link to="/experiments" className="underline">Experiments → Corpus Ingest</Link>: (1) ingest sources → <code>bench_cases</code>, (2) Schedule → <code>bench_runs</code>, (3) Run workers, (4) Aggregate. This is the fan-out path that exercises Pathway B/C at scale.</div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleExtract} disabled={pipeline.isProcessing} className="gap-2">
               <Play className="w-4 h-4" /> Extract, Validate & Persist to KG
@@ -704,7 +774,7 @@ export default function KGConstruction() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Sources: <strong>Paste</strong>, <strong>Test corpus (n={domainCases.length})</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
+            Sources: <strong>Paste</strong>, <strong>Curated corpus (n={domainCases.length}, gold)</strong>, <strong>N1K batch</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
           </p>
         </CardContent>
       </Card>
