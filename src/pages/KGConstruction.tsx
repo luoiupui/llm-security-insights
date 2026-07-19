@@ -751,6 +751,15 @@ export default function KGConstruction() {
             </TabsContent>
           </Tabs>
 
+          <div className="p-3 rounded border border-primary/30 bg-primary/5 text-[11px] space-y-1.5">
+            <div className="font-semibold text-foreground text-xs flex items-center gap-1.5"><Workflow className="w-3.5 h-3.5" />Two-corpus model — which path do you want?</div>
+            <div><strong>Single case (this panel):</strong> pick from <em>Curated corpus (n={domainCases.length}, gold)</em>, <em>N1K batch</em>, <em>Live feed</em>, or paste text →
+              <span className="font-mono"> Extract, Validate &amp; Persist to KG</span> →
+              <span className="font-mono"> Refresh KB</span> (only after MITRE/KEV updates) →
+              <span className="font-mono"> Bootstrap GraphRAG Corpus</span> (once, after ~20+ cases persisted). Per-document, gold-scored via KG-Bench.</div>
+            <div><strong>N≥1,000 batch:</strong> not this panel — go to <Link to="/experiments" className="underline">Experiments → Corpus Ingest</Link>: (1) ingest sources → <code>bench_cases</code>, (2) Schedule → <code>bench_runs</code>, (3) Run workers, (4) Aggregate. This is the fan-out path that exercises Pathway B/C at scale.</div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleExtract} disabled={pipeline.isProcessing} className="gap-2">
               <Play className="w-4 h-4" /> Extract, Validate & Persist to KG
@@ -765,7 +774,7 @@ export default function KGConstruction() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Sources: <strong>Paste</strong>, <strong>Test corpus (n={domainCases.length})</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
+            Sources: <strong>Paste</strong>, <strong>Curated corpus (n={domainCases.length}, gold)</strong>, <strong>N1K batch</strong>, <strong>Live feed</strong> are active. <strong>Upload file</strong> and <strong>External API</strong> (OTX / MISP / VirusTotal) tabs are reserved for future ingestion channels — the pipeline stays the same regardless of source.
           </p>
         </CardContent>
       </Card>
