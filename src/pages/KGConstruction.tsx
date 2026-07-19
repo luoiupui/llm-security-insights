@@ -676,6 +676,48 @@ export default function KGConstruction() {
               )}
             </TabsContent>
 
+            <TabsContent value="n1k" className="mt-3 space-y-2">
+              <div className="p-2 rounded bg-info/10 border border-info/30 text-[11px] text-info-foreground/90">
+                <strong>N1K batch corpus</strong> — bulk-ingested documents from CISA KEV, MITRE ATT&amp;CK Groups, JPCERT/CC, CNCERT, vendor PSIRTs with mandatory attribution.
+                Separate from the {domainCases.length}-case gold-labelled curated corpus above.
+                For full 1,000-case fan-out runs, use <Link to="/experiments" className="underline">Experiments → Corpus Ingest</Link>.
+                This tab is for <em>single-case inspection</em>: load one row into the pipeline below.
+              </div>
+              {n1kLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground p-3"><Loader2 className="w-3 h-3 animate-spin" />Loading bench_cases…</div>
+              ) : n1kTotal === 0 ? (
+                <div className="p-3 rounded bg-warning/10 border border-warning/30 text-xs text-warning">
+                  <strong>bench_cases is empty.</strong> Go to <Link to="/experiments" className="underline font-mono">Experiments → Corpus Ingest</Link> and click <em>Ingest CISA KEV</em> or <em>Ingest MITRE Groups</em> to populate it.
+                </div>
+              ) : (
+                <>
+                  <div className="text-[11px] text-muted-foreground">
+                    Showing latest {n1kRows.length} of <strong className="text-foreground">{n1kTotal}</strong> ingested cases.
+                  </div>
+                  <div className="space-y-1.5 max-h-64 overflow-auto">
+                    {n1kRows.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => { setInputText(r.raw_text); toast.success(`Loaded ${r.source_feed} case`); }}
+                        className="w-full text-left p-2 rounded bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <Badge variant="outline" className="text-[10px] font-mono">{r.source_feed}</Badge>
+                          <span className="text-muted-foreground">{r.publisher ?? "—"}</span>
+                        </div>
+                        <div className="text-xs text-foreground/80 line-clamp-2 mt-1 font-mono">{(r.title ?? r.raw_text).slice(0, 200)}…</div>
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    className="min-h-[80px] font-mono text-xs bg-secondary/30"
+                  />
+                </>
+              )}
+            </TabsContent>
+
             <TabsContent value="feed" className="mt-3 space-y-2">
               {feedLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground p-3"><Loader2 className="w-3 h-3 animate-spin" />Loading recent reports…</div>
