@@ -145,3 +145,6 @@ The pipeline algorithms and ontologies do not change. Three tuning items (runner
 - McNemar (1947). *Note on the sampling error of the difference between correlated proportions or percentages.*
 - pgvector — https://github.com/pgvector/pgvector
 - Vercel AI SDK · `generateText` / `stopWhen` — https://sdk.vercel.ai/
+
+
+**See also:** [`n1000-corpus-dataset-card.md`](n1000-corpus-dataset-card.md) — live counts, sources, taxonomy, correlation to gold n=56, usage matrix.

@@ -1,41 +1,59 @@
-## Why the "Test Corpus (n=56)" dropdown does not reflect N=1,000
 
-They are **two different data stores that were never wired together** — this is expected, not a bug, but the label should say so.
+## Findings (verified against the live DB and repo)
 
-### Two corpora, two purposes
+**1. Can the N1K corpus alone in the Experiments Panel replace the gold n=56 for KG construction training/test?**
 
-| # | Store | Where it lives | Count | Purpose |
-|---|---|---|---|---|
-| 1 | **Curated eval corpus** | `src/lib/test-corpus.ts` (bundled TS array) | **56 CTI cases** | Hand-picked fixtures with expected entities/relations. Used by KG-Bench scorers (Precision/Recall/F1) and by the KG Construction dropdown so you can one-click paste a known input. Ships in the JS bundle. |
-| 2 | **N1K ingest corpus** | `bench_cases` table (Lovable Cloud DB), populated by `corpus-ingest-cisa-kev` / `mitre-groups` / `rss` | up to **N≥1,000** | Bulk documents with source attribution for large-scale Pathway B/C runs orchestrated by `bench-schedule` → `bench-worker` → `bench-runs`. No gold labels; used for throughput, cost, and aggregate metrics — not F1. |
+No — and the code already enforces this by design (two-corpus model):
 
-The KG Construction "KG Input Source" panel only reads store #1 (the bundled TS array), which is why it still shows n=56. Store #2 is consumed by the **Corpus Ingest** tab on the Experiments page (fan-out runner), not by the paste-and-extract panel.
+- `bench_cases` currently holds **166 rows** (not 1,000 yet): 50 CISA KEV, 50 MITRE ATT&CK groups, 30 Cisco PSIRT, 30 MSRC, 6 JPCERT. `bench_runs` is empty — no batch has been executed yet.
+- `bench_cases` rows carry **no gold triples / no gold hyperedges**. The KG-Bench scorers in `src/lib/kg-bench/scorers.ts` compute Precision / Recall / F1 by comparing extractor output against the gold set in `src/lib/test-corpus.ts` (n=56). Without gold labels, N1K can only measure **throughput, latency, token cost, and coverage** — not extraction accuracy.
+- The pipeline is zero-shot (no fine-tuning), so "training" here means prompt/rule engineering + rule-mining candidates (C3), not gradient training. N1K feeds C3 rule mining and stress-tests the pipeline; it does **not** substitute for the labeled evaluation set.
 
-### So no — the sequence you asked about is not the right next step for this
+Correct division of labor:
+- **Gold n=56** → accuracy scoring (F1, McNemar, Wilson CI), regression gate.
+- **N1K (target 1,000, live 166)** → scale / cost / latency / rule-mining signal, and demo persistence.
 
-"Extract, Validate & Persist to KG" → "Refresh KB" → "Bootstrap GraphRAG Corpus" operates on **one document at a time** from the paste box or a single dropdown selection. Clicking it 1,000 times to touch the N1K set is not the intended path. It also would not surface the N1K cases in the dropdown, because the dropdown never queries `bench_cases`.
+**2. Is there already a report on the N1K corpus (sources, types, correlation, usage)?**
 
-### What the plan proposes (documentation-only, no code changes)
+Partial, spread across three docs — none is a single "dataset card" with the *actually ingested* numbers:
 
-Since this is plan mode and the user asked for an explanation + next-step guidance, the plan is purely to align the UI and docs so the split is obvious. Implementation happens after approval.
+| Report | What it covers | Gap |
+|---|---|---|
+| `n1000-ingest-runbook.md` | Operator workflow, attribution model, Appendix A two-corpus note | No per-feed counts, no stratum breakdown of live data |
+| `issue3-n1000-impact-analysis.md` | Compute-cost projection at N=1,000 | Projection only; not a dataset description |
+| `issue3-corpus-scaleup-feasibility.md` | Source-tier feasibility (CISA/MITRE/PSIRT/JPCERT/CNCERT) | Pre-ingest planning, no live counts |
+| `corpus-expansion-and-statistics.md` | Gold n=56 stratification & stats layer | Explicitly about the gold set, not N1K |
 
-1. **Clarify the dropdown label** in `src/pages/KGConstruction.tsx`
-   - Rename "Test Corpus (n=56)" → **"Curated eval corpus (n=56, gold-labelled)"**.
-   - Add a one-line helper under it: *"For N≥1,000 ingested cases, use Experiments → Corpus Ingest → Run batch."*
-   - Add a small "View N1K batch" link that deep-links to `/experiments#corpus-ingest`.
+No document currently states: what is *in* `bench_cases` today, per-feed license/publisher, how each stratum correlates to the gold-56 strata, and which downstream module consumes which slice.
 
-2. **Cross-link from the Corpus Ingest panel back to KG Construction** for single-case inspection: each `bench_cases` row gets a "Send to KG Construction" action that pastes `raw_text` into the input box.
+## Plan
 
-3. **Correct next-step recipe** (added as a callout box on KG Construction):
-   - *Single-case inspection / demo / gold-labelled scoring:* stay on this page → pick from the curated dropdown OR paste text → **Extract, Validate & Persist to KG** → optionally **Refresh KB** → optionally **Bootstrap GraphRAG Corpus**. This is the right sequence — but it is per-document.
-   - *N=1,000 batch run:* go to **Experiments → Corpus Ingest** → (a) click each ingest source button to populate `bench_cases`, (b) **Schedule batch** (fan-out to `bench_runs`), (c) **Run workers** (concurrency-limited), (d) **Aggregate** (writes metrics). This is the path that actually exercises Pathway B/C at N=1,000.
+### 1. New report: `public/reports/n1000-corpus-dataset-card.md`
 
-4. **Update `public/reports/n1000-ingest-runbook.md`** with a "Two-corpus model" section stating the split explicitly, and update `implementation-roadmap.md` to mark the dropdown-labelling task.
+A single dataset card for the N1K corpus with live numbers. Sections:
 
-### Answering the button question directly
+- **Snapshot** — live counts from `bench_cases` (currently 166 / target 1,000), progress bar per feed toward the Tier-3 mix in `issue3-corpus-scaleup-feasibility.md`.
+- **Sources & attribution table** — per feed: publisher, license, URL pattern, adapter file (`corpus-ingest-cisa-kev`, `corpus-ingest-mitre-groups`, `corpus-ingest-rss`), refresh cadence.
+- **Type taxonomy** — map `stratum` values (`kev`, `apt-narrative`, `psirt`, `multilingual`, planned `ics-ot`, `adversarial`) to CTI content classes (exploit chain, actor narrative, vendor advisory, multilingual advisory, ICS/OT, hard negative).
+- **Correlation to gold n=56** — table showing which gold-56 strata each N1K stratum stresses, and which it does *not* cover (so reviewers see the intentional separation).
+- **Usage matrix** — which module consumes N1K: `bench-schedule` / `bench-worker` (batch runs), C3 rule-mining candidate generation, GraphRAG bootstrap corpus, throughput/latency measurement. Explicit callout that F1/P/R scoring is **not** on this path.
+- **What N1K cannot replace** — the gold set; explains why and points to the two-corpus model in the runbook.
+- **Refresh + reproducibility** — how to re-ingest, dedup key (`source_feed,source_url`), and how to snapshot a run.
 
-- **Extract, Validate & Persist to KG** — yes, run this per case you want in the persisted KG. It writes entities/relations to `kg_*` tables, runs conflict rules, and updates credibility. Do it once per demo document; don't loop it manually over 1,000 rows — that's what `bench-worker` is for.
-- **Refresh KB** — click after `kb-ingest` runs (MITRE ATT&CK + CISA KEV) or after you notice Layer A validation warnings about unknown IDs. Not tied to each extract.
-- **Bootstrap GraphRAG Corpus** — click **once** after you have a meaningful KG persisted (say, ≥20 extracted documents), so subsequent runs get retrieval-augmented context. Re-run only when the KG has materially grown.
+Registered in `public/reports/manifest.json` so it ships in the ReportDownloads ZIP.
 
-No files are edited in this plan step; approval turns the four items above into build-mode changes.
+### 2. GUI clarification (Experiments → Corpus N1K tab)
+
+In `src/components/CorpusIngestPanel.tsx`, add a short info banner at the top:
+
+> "N1K measures scale, latency, cost, and rule-mining signal. Accuracy scoring (F1, McNemar) stays on the gold n=56 set — the two corpora are complementary, not interchangeable."
+
+Link the banner to the new dataset card and to Appendix A of the runbook.
+
+### 3. Cross-links
+
+- Append a "See also" pointer to the new dataset card in `n1000-ingest-runbook.md`, `issue3-n1000-impact-analysis.md`, and `corpus-expansion-and-statistics.md`.
+
+### Out of scope for this plan
+- Actually ingesting the remaining ~834 rows to reach N=1,000 (operator action via the existing Fetch buttons).
+- Adding gold labels to N1K rows (would be a separate annotation project — see feasibility memo §Annotation cost).

@@ -204,6 +204,35 @@ export function CorpusIngestPanel() {
         </CardContent>
       </Card>
 
+      {/* Two-corpus disclaimer */}
+      <Card className="border-amber-500/40 bg-amber-500/5">
+        <CardContent className="p-3 text-xs space-y-1">
+          <div className="font-medium text-amber-400">Two-corpus model — N1K ≠ gold n=56</div>
+          <p className="text-muted-foreground">
+            N1K measures <b>scale, latency, token cost, and rule-mining signal</b>.
+            Accuracy scoring (F1, Precision/Recall, McNemar, Wilson CI) stays on the
+            bundled gold <b>n=56</b> set — the two corpora are complementary, not
+            interchangeable. N1K rows carry no gold labels.
+          </p>
+          <p className="text-muted-foreground">
+            See{" "}
+            <a href="/reports/n1000-corpus-dataset-card.md" target="_blank"
+               rel="noopener noreferrer"
+               className="text-primary underline underline-offset-2">
+              N1K dataset card
+            </a>{" "}
+            and{" "}
+            <a href="/reports/n1000-ingest-runbook.md#appendix-a" target="_blank"
+               rel="noopener noreferrer"
+               className="text-primary underline underline-offset-2">
+              runbook Appendix A
+            </a>.
+          </p>
+        </CardContent>
+      </Card>
+
+
+
       {/* 1. INGEST */}
       <Card className="border-border/50 bg-card/80">
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
