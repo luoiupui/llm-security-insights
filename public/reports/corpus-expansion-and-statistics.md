@@ -82,3 +82,6 @@ Every headline F1 in future runs is reported as **`F1 [lo, hi]` at 95 %** with t
 - MITRE ATT&CK Enterprise v15. https://attack.mitre.org/
 - JPCERT/CC 注意喚起. https://www.jpcert.or.jp/at/
 - CNCERT/CC. https://www.cert.org.cn/
+
+
+**See also:** [`n1000-corpus-dataset-card.md`](n1000-corpus-dataset-card.md) — live counts, sources, taxonomy, correlation to gold n=56, usage matrix.

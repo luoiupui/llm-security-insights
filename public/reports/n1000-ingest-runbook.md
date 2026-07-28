@@ -123,3 +123,6 @@ The project intentionally maintains **two disjoint corpora**. They are not merge
 - KG Construction dropdown label renamed from `Test corpus (n=56)` → `Curated corpus (n=56, gold)`.
 - New **N1K batch (bench_cases)** tab added for single-case inspection of ingested cases, with a deep-link to Experiments → Corpus Ingest for the batch runner.
 - Added a "Two-corpus model" callout above the action buttons so operators pick the right path.
+
+
+**See also:** [`n1000-corpus-dataset-card.md`](n1000-corpus-dataset-card.md) — live counts, sources, taxonomy, correlation to gold n=56, usage matrix.
