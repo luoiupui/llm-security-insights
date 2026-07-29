@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getCorpus, CATEGORIES, CATEGORY_LABEL } from "@/lib/kg-bench/corpus";
 import { runBench, exportBenchMarkdown, type BenchRun } from "@/lib/kg-bench/runner";
 import { getOntology } from "@/lib/ontology";
+import { ExternalBenchmarksPanel } from "@/components/ExternalBenchmarksPanel";
 
 export function KGBenchPanel() {
   const { domain } = useDomain();
@@ -202,6 +203,8 @@ export function KGBenchPanel() {
           </Card>
         </>
       )}
+
+      <ExternalBenchmarksPanel />
     </div>
   );
 }
