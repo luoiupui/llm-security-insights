@@ -47,7 +47,7 @@ export interface BenchRun {
 }
 
 
-async function runCase(c: BenchCase, domain: Domain): Promise<CaseResult> {
+export async function runCase(c: BenchCase, domain: Domain): Promise<CaseResult> {
   const t0 = performance.now();
   try {
     const pre = await preprocessText(c.text, "auto", domain);
