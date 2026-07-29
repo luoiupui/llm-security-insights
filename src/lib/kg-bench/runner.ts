@@ -239,6 +239,41 @@ export async function runBench(
   return { domain, startedAt, finishedAt, totalMs, results, perCategory, benchScore };
 }
 
+/**
+ * Run the bench on an arbitrary case list (e.g. loaded from an external
+ * benchmark such as DNRTI or CASIE). Bypasses the bundled gold corpus.
+ * No data is committed to the repo — cases live only in the caller's memory.
+ */
+export async function runBenchOnCases(
+  domain: Domain,
+  cases: BenchCase[],
+  onProgress?: (done: number, total: number, current: string) => void,
+): Promise<BenchRun> {
+  const startedAt = new Date().toISOString();
+  const t0 = performance.now();
+  const results: CaseResult[] = [];
+  for (let i = 0; i < cases.length; i++) {
+    onProgress?.(i, cases.length, cases[i].name);
+    results.push(await runCase(cases[i], domain));
+  }
+  onProgress?.(cases.length, cases.length, "complete");
+  const perCategory: Record<TaskCategory, { f1: number; n: number }> = {} as any;
+  for (const cat of CATEGORIES) {
+    const rs = results.filter(r => r.category === cat);
+    perCategory[cat] = {
+      f1: rs.length ? +(rs.reduce((a, b) => a + b.score.f1, 0) / rs.length).toFixed(3) : 0,
+      n: rs.length,
+    };
+  }
+  const active = Object.values(perCategory).filter(c => c.n > 0);
+  const benchScore = active.length ? +(active.reduce((a, b) => a + b.f1, 0) / active.length).toFixed(3) : 0;
+  return {
+    domain, startedAt, finishedAt: new Date().toISOString(),
+    totalMs: Math.round(performance.now() - t0),
+    results, perCategory, benchScore,
+  };
+}
+
 export function exportBenchMarkdown(run: BenchRun): string {
   const lines: string[] = [];
   lines.push(`# KG-Bench Report (${run.domain.toUpperCase()})`);
