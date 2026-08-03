@@ -592,6 +592,10 @@ export default function KGConstruction() {
           <a href="#pathway-fusion" className="px-2 py-1 rounded border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10">
             Multi-Modal Fusion <Badge variant="outline" className="ml-1 border-muted-foreground/40 text-muted-foreground">Spec / Mock</Badge>
           </a>
+          <a href="#rule-governance" className="px-2 py-1 rounded border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10">
+            Rule Governance <Badge variant="outline" className="ml-1 border-muted-foreground/40 text-muted-foreground">C1–C4</Badge>
+          </a>
+
         </CardContent>
       </Card>
 
