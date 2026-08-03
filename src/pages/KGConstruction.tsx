@@ -1234,6 +1234,19 @@ export default function KGConstruction() {
         </Collapsible>
       </section>
 
+      {/* ── Hybrid rule governance: expert baseline + adaptive C1–C4 ── */}
+      <section id="rule-governance" className="scroll-mt-20 space-y-3">
+        <div className="flex items-center gap-2 border-l-4 border-emerald-500 pl-3 py-1">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <h2 className="text-sm font-semibold tracking-tight">
+            Hybrid Rule Governance — expert baseline + adaptive layers C1–C4
+          </h2>
+          <Badge variant="outline" className="text-[10px]">replayable</Badge>
+        </div>
+        <RuleGovernancePanel />
+      </section>
+
+
       {/* ── Additional: Multi-Modal Fusion (mock) ─────────────────── */}
       <section id="pathway-fusion" className="scroll-mt-20">
         <Collapsible className="mt-6">
