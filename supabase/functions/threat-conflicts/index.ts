@@ -203,8 +203,53 @@ serve(async (req) => {
     conflicts.push(applyR12(edges));
     conflicts.push(applyR13(nodes));
 
-    // ── Compute Global Credibility Score ──
-    const credibilityScore = computeCredibilityScore(nodes, edges, source_reliability);
+    // ══════════════════════════════════════════════════════════════
+    // HYBRID RULE GOVERNANCE — adaptive layers C1–C4 (G2/G5/G6)
+    // Expert baseline above + adaptive layers below jointly produce the
+    // KG. Response shape is unchanged; only additive fields are added.
+    // ══════════════════════════════════════════════════════════════
+    const requestedLayers: Array<"C1" | "C2" | "C3" | "C4"> = Array.isArray(adaptive_layers)
+      ? adaptive_layers.filter((l: string) => ["C1", "C2", "C3", "C4"].includes(l))
+      : ["C1", "C2", "C3", "C4"];
+
+    // C4 needs historical relation frequencies from the live KG.
+    let anomalyCtx: { historicalCounts: Record<string, number> } | null = null;
+    if (requestedLayers.includes("C4")) {
+      anomalyCtx = { historicalCounts: await fetchHistoricalRelationCounts() };
+    }
+
+    const adaptive = runAdaptiveLayers({
+      entities: nodes as any,
+      relations: edges as any,
+      causal: causalLinks as any,
+      temporalCtx: { windowDays: drift_window_days },
+      anomalyCtx,
+      layers: requestedLayers,
+    });
+
+    // Project adaptive violations into the existing ConflictResult shape so
+    // every downstream consumer keeps working unchanged.
+    for (const v of adaptive.violations) {
+      conflicts.push({
+        rule: v.rule_id,
+        status: v.severity === "failure" ? "fail" : "warn",
+        detail: v.message,
+        type: `adaptive_${v.layer}`,
+        affected_items: [],
+        layer: v.layer,
+        provenance: v.provenance,
+      } as ConflictResult);
+    }
+
+    // Rule-set snapshot + fingerprint → the replay key (G3).
+    const registry = buildRegistry();
+    const ruleSetVersion = await registryFingerprint(registry);
+    void recordRuleSet(ruleSetVersion, registry);
+
+    // ── Compute Global Credibility Score (provenance-weighted, G6) ──
+    const baseCredibility = computeCredibilityScore(nodes, edges, source_reliability);
+    const adaptivePenalty = provenancePenalty(adaptive.violations);
+    const credibilityScore = Math.max(0, Number((baseCredibility * (1 - adaptivePenalty)).toFixed(4)));
 
     // ── LLM-based conflict resolution for warnings/failures ──
     let llmResolution = null;
@@ -220,6 +265,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       conflicts,
       credibility_score: credibilityScore,
+      base_credibility_score: baseCredibility,
+      adaptive_penalty: Number(adaptivePenalty.toFixed(4)),
       llm_resolution: llmResolution,
       summary: {
         total_rules: conflicts.length,
@@ -227,9 +274,15 @@ serve(async (req) => {
         warnings: conflicts.filter(c => c.status === "warn").length,
         failures: conflicts.filter(c => c.status === "fail").length,
       },
+      // Hybrid rule governance (additive fields — stage contract preserved)
+      rule_kernel_version: RULE_KERNEL_VERSION,
+      rule_set_version: ruleSetVersion,
+      layers_run: adaptive.layers_run,
+      adaptive_violations: adaptive.violations,
       // PH3: Pathway C joint-validity block (R14–R16). null when mode !== "hyperedges".
       hyperedge_conflicts: hyperedgeBlock,
     }), {
+
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
