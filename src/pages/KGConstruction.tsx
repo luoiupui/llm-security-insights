@@ -28,6 +28,8 @@ import { useDomain } from "@/contexts/DomainContext";
 import { AgentLoopPanel } from "@/components/AgentLoopPanel";
 import { MultiModalFusionMock } from "@/components/MultiModalFusionMock";
 import { HypergraphPathwayPanel } from "@/components/HypergraphPathwayPanel";
+import { RuleGovernancePanel } from "@/components/RuleGovernancePanel";
+
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 
