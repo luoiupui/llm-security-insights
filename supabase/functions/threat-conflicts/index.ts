@@ -1,4 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  buildRegistry,
+  registryFingerprint,
+  runAdaptiveLayers,
+  provenancePenalty,
+  RULE_KERNEL_VERSION,
+} from "../_shared/rules/registry.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
