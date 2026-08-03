@@ -61,7 +61,47 @@ interface ConflictResult {
   detail: string;
   type: string;
   affected_items?: string[];
+  layer?: string;
+  provenance?: string;
 }
+
+const serviceClient = () => {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  return createClient(url, key);
+};
+
+/** C4 support: relation-label frequency over the persisted KG. */
+async function fetchHistoricalRelationCounts(): Promise<Record<string, number>> {
+  const client = serviceClient();
+  if (!client) return {};
+  const { data, error } = await client.from("kg_relations").select("relation").limit(5000);
+  if (error || !data) return {};
+  const counts: Record<string, number> = {};
+  for (const row of data as Array<{ relation: string }>) {
+    if (!row?.relation) continue;
+    counts[row.relation] = (counts[row.relation] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** G3: persist the active rule-set snapshot so runs can be replayed. */
+async function recordRuleSet(version: string, rules: unknown[]): Promise<void> {
+  const client = serviceClient();
+  if (!client) return;
+  try {
+    await client
+      .from("kg_rule_sets")
+      .upsert(
+        { version, kernel_version: RULE_KERNEL_VERSION, rules, notes: "auto-snapshot from threat-conflicts" },
+        { onConflict: "version", ignoreDuplicates: true },
+      );
+  } catch (e) {
+    console.warn("rule-set snapshot failed (non-fatal):", e);
+  }
+}
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
