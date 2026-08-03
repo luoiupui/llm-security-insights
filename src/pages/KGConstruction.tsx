@@ -28,6 +28,8 @@ import { useDomain } from "@/contexts/DomainContext";
 import { AgentLoopPanel } from "@/components/AgentLoopPanel";
 import { MultiModalFusionMock } from "@/components/MultiModalFusionMock";
 import { HypergraphPathwayPanel } from "@/components/HypergraphPathwayPanel";
+import { RuleGovernancePanel } from "@/components/RuleGovernancePanel";
+
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 
@@ -590,6 +592,10 @@ export default function KGConstruction() {
           <a href="#pathway-fusion" className="px-2 py-1 rounded border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10">
             Multi-Modal Fusion <Badge variant="outline" className="ml-1 border-muted-foreground/40 text-muted-foreground">Spec / Mock</Badge>
           </a>
+          <a href="#rule-governance" className="px-2 py-1 rounded border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10">
+            Rule Governance <Badge variant="outline" className="ml-1 border-muted-foreground/40 text-muted-foreground">C1–C4</Badge>
+          </a>
+
         </CardContent>
       </Card>
 
@@ -1233,6 +1239,19 @@ export default function KGConstruction() {
           </CollapsibleContent>
         </Collapsible>
       </section>
+
+      {/* ── Hybrid rule governance: expert baseline + adaptive C1–C4 ── */}
+      <section id="rule-governance" className="scroll-mt-20 space-y-3">
+        <div className="flex items-center gap-2 border-l-4 border-emerald-500 pl-3 py-1">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <h2 className="text-sm font-semibold tracking-tight">
+            Hybrid Rule Governance — expert baseline + adaptive layers C1–C4
+          </h2>
+          <Badge variant="outline" className="text-[10px]">replayable</Badge>
+        </div>
+        <RuleGovernancePanel />
+      </section>
+
 
       {/* ── Additional: Multi-Modal Fusion (mock) ─────────────────── */}
       <section id="pathway-fusion" className="scroll-mt-20">

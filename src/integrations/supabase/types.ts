@@ -506,6 +506,80 @@ export type Database = {
           },
         ]
       }
+      kg_rule_replays: {
+        Row: {
+          created_at: string
+          diff: Json
+          id: string
+          matched: boolean
+          original_rule_set_version: string | null
+          original_violation_count: number
+          replay_rule_set_version: string
+          replay_violation_count: number
+          report_id: string | null
+          source_label: string
+        }
+        Insert: {
+          created_at?: string
+          diff?: Json
+          id?: string
+          matched?: boolean
+          original_rule_set_version?: string | null
+          original_violation_count?: number
+          replay_rule_set_version: string
+          replay_violation_count?: number
+          report_id?: string | null
+          source_label: string
+        }
+        Update: {
+          created_at?: string
+          diff?: Json
+          id?: string
+          matched?: boolean
+          original_rule_set_version?: string | null
+          original_violation_count?: number
+          replay_rule_set_version?: string
+          replay_violation_count?: number
+          report_id?: string | null
+          source_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kg_rule_replays_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "threat_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kg_rule_sets: {
+        Row: {
+          created_at: string
+          id: string
+          kernel_version: string
+          notes: string | null
+          rules: Json
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kernel_version: string
+          notes?: string | null
+          rules?: Json
+          version: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kernel_version?: string
+          notes?: string | null
+          rules?: Json
+          version?: string
+        }
+        Relationships: []
+      }
       monitoring_events: {
         Row: {
           category: string

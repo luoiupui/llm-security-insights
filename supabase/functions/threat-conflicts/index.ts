@@ -1,4 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  buildRegistry,
+  registryFingerprint,
+  runAdaptiveLayers,
+  provenancePenalty,
+  RULE_KERNEL_VERSION,
+} from "../_shared/rules/registry.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,7 +61,47 @@ interface ConflictResult {
   detail: string;
   type: string;
   affected_items?: string[];
+  layer?: string;
+  provenance?: string;
 }
+
+const serviceClient = () => {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  return createClient(url, key);
+};
+
+/** C4 support: relation-label frequency over the persisted KG. */
+async function fetchHistoricalRelationCounts(): Promise<Record<string, number>> {
+  const client = serviceClient();
+  if (!client) return {};
+  const { data, error } = await client.from("kg_relations").select("relation").limit(5000);
+  if (error || !data) return {};
+  const counts: Record<string, number> = {};
+  for (const row of data as Array<{ relation: string }>) {
+    if (!row?.relation) continue;
+    counts[row.relation] = (counts[row.relation] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** G3: persist the active rule-set snapshot so runs can be replayed. */
+async function recordRuleSet(version: string, rules: unknown[]): Promise<void> {
+  const client = serviceClient();
+  if (!client) return;
+  try {
+    await client
+      .from("kg_rule_sets")
+      .upsert(
+        { version, kernel_version: RULE_KERNEL_VERSION, rules, notes: "auto-snapshot from threat-conflicts" },
+        { onConflict: "version", ignoreDuplicates: true },
+      );
+  } catch (e) {
+    console.warn("rule-set snapshot failed (non-fatal):", e);
+  }
+}
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -69,7 +118,10 @@ serve(async (req) => {
       domain = "cti",
       mode = "triples",        // "triples" | "hyperedges"  (PH3, Pathway C)
       hyperedges = [],          // only used when mode === "hyperedges"
+      adaptive_layers,          // optional subset of ["C1","C2","C3","C4"] (ablation / replay)
+      drift_window_days = 180,  // C1 R10 window
     } = await req.json();
+
 
     // ── Pathway C dispatch (PH3): hyperedge-native joint-validity rules ──
     // Runs IN ADDITION to the standard triple-mode rules below, so the
@@ -194,8 +246,53 @@ serve(async (req) => {
     conflicts.push(applyR12(edges));
     conflicts.push(applyR13(nodes));
 
-    // ── Compute Global Credibility Score ──
-    const credibilityScore = computeCredibilityScore(nodes, edges, source_reliability);
+    // ══════════════════════════════════════════════════════════════
+    // HYBRID RULE GOVERNANCE — adaptive layers C1–C4 (G2/G5/G6)
+    // Expert baseline above + adaptive layers below jointly produce the
+    // KG. Response shape is unchanged; only additive fields are added.
+    // ══════════════════════════════════════════════════════════════
+    const requestedLayers: Array<"C1" | "C2" | "C3" | "C4"> = Array.isArray(adaptive_layers)
+      ? adaptive_layers.filter((l: string) => ["C1", "C2", "C3", "C4"].includes(l))
+      : ["C1", "C2", "C3", "C4"];
+
+    // C4 needs historical relation frequencies from the live KG.
+    let anomalyCtx: { historicalCounts: Record<string, number> } | null = null;
+    if (requestedLayers.includes("C4")) {
+      anomalyCtx = { historicalCounts: await fetchHistoricalRelationCounts() };
+    }
+
+    const adaptive = runAdaptiveLayers({
+      entities: nodes as any,
+      relations: edges as any,
+      causal: causalLinks as any,
+      temporalCtx: { windowDays: drift_window_days },
+      anomalyCtx,
+      layers: requestedLayers,
+    });
+
+    // Project adaptive violations into the existing ConflictResult shape so
+    // every downstream consumer keeps working unchanged.
+    for (const v of adaptive.violations) {
+      conflicts.push({
+        rule: v.rule_id,
+        status: v.severity === "failure" ? "fail" : "warn",
+        detail: v.message,
+        type: `adaptive_${v.layer}`,
+        affected_items: [],
+        layer: v.layer,
+        provenance: v.provenance,
+      } as ConflictResult);
+    }
+
+    // Rule-set snapshot + fingerprint → the replay key (G3).
+    const registry = buildRegistry();
+    const ruleSetVersion = await registryFingerprint(registry);
+    void recordRuleSet(ruleSetVersion, registry);
+
+    // ── Compute Global Credibility Score (provenance-weighted, G6) ──
+    const baseCredibility = computeCredibilityScore(nodes, edges, source_reliability);
+    const adaptivePenalty = provenancePenalty(adaptive.violations);
+    const credibilityScore = Math.max(0, Number((baseCredibility * (1 - adaptivePenalty)).toFixed(4)));
 
     // ── LLM-based conflict resolution for warnings/failures ──
     let llmResolution = null;
@@ -211,6 +308,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       conflicts,
       credibility_score: credibilityScore,
+      base_credibility_score: baseCredibility,
+      adaptive_penalty: Number(adaptivePenalty.toFixed(4)),
       llm_resolution: llmResolution,
       summary: {
         total_rules: conflicts.length,
@@ -218,9 +317,15 @@ serve(async (req) => {
         warnings: conflicts.filter(c => c.status === "warn").length,
         failures: conflicts.filter(c => c.status === "fail").length,
       },
+      // Hybrid rule governance (additive fields — stage contract preserved)
+      rule_kernel_version: RULE_KERNEL_VERSION,
+      rule_set_version: ruleSetVersion,
+      layers_run: adaptive.layers_run,
+      adaptive_violations: adaptive.violations,
       // PH3: Pathway C joint-validity block (R14–R16). null when mode !== "hyperedges".
       hyperedge_conflicts: hyperedgeBlock,
     }), {
+
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
