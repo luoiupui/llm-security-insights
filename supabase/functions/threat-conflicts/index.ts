@@ -118,7 +118,10 @@ serve(async (req) => {
       domain = "cti",
       mode = "triples",        // "triples" | "hyperedges"  (PH3, Pathway C)
       hyperedges = [],          // only used when mode === "hyperedges"
+      adaptive_layers,          // optional subset of ["C1","C2","C3","C4"] (ablation / replay)
+      drift_window_days = 180,  // C1 R10 window
     } = await req.json();
+
 
     // ── Pathway C dispatch (PH3): hyperedge-native joint-validity rules ──
     // Runs IN ADDITION to the standard triple-mode rules below, so the
