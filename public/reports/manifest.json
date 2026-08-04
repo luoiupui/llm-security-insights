@@ -102,6 +102,11 @@
       "sha256": "living-doc-pathway-c-ph2-ph3"
     },
     {
+      "name": "hybrid-rule-governance-clarification.md",
+      "bytes": 15669,
+      "sha256": "35d2dcc051b113dee4e25eb38047c3747065df315c372aeaeb698eeb1ecaa0c2"
+    },
+    {
       "name": "issue3-sota-benchmark-gap.md",
       "bytes": 0,
       "sha256": "issue3-sota-benchmark-gap-v1"
