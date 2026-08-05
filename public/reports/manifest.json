@@ -2,6 +2,11 @@
   "generatedAt": "2026-04-23T22:00:00.000Z",
   "files": [
     {
+      "name": "zero-shot-attestation.md",
+      "bytes": 6100,
+      "sha256": "zeroshotattest001"
+    },
+    {
       "name": "comprehensive-technical-report.md",
       "bytes": 34049,
       "sha256": "fb7b6c4d35e286cc"
