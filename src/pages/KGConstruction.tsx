@@ -74,7 +74,7 @@ const DOWNSTREAM_CONSUMERS: ConsumerCard[] = [
   { name: "Automated response playbooks", desc: "Reserved — future SOAR hand-off (block IOC, isolate host).", icon: Workflow, status: "reserved" },
   { name: "Risk scoring & decision support", desc: "Reserved — analyst-assist for prioritisation and triage.", icon: Gauge, status: "reserved" },
   { name: "STIX 2.1 export to SIEM", desc: "Reserved — future bundle export endpoint for downstream tooling.", icon: Share2, status: "reserved" },
-  { name: "ML feedback loop", desc: "Reserved — training signal for embedding fine-tune and re-ranking.", icon: Brain, status: "reserved" },
+  { name: "ML feedback loop", desc: "Not implemented — would introduce a learned component and break the zero-shot posture.", icon: Brain, status: "reserved" },
 ];
 
 export default function KGConstruction() {
