@@ -276,6 +276,9 @@ export default function Experiments() {
             <p className="text-sm text-muted-foreground mt-1">
               Two-stage evaluation: MITRE ATT&CK + CAPEC → +NVD/CVE + STIX/TAXII
             </p>
+            <p className="text-[11px] text-muted-foreground/80 mt-1 font-mono">
+              Evaluation only — corpora are scored against a frozen zero-shot model; no training occurs here.
+            </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap justify-end">
             <div className="flex gap-2">
