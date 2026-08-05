@@ -568,6 +568,14 @@ export default function KGConstruction() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Knowledge Graph Construction</h1>
           <p className="text-sm text-muted-foreground mt-1">Live LLM-driven entity extraction & relation mapping (Ch. 3)</p>
+          <a
+            href="/reports/zero-shot-attestation.md"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded border border-success/40 text-success text-[10px] font-mono hover:bg-success/10"
+          >
+            Zero-shot · frozen model · no fine-tuning
+          </a>
         </div>
         {pipeline.isProcessing && (
           <Badge variant="secondary" className="bg-info/20 text-info gap-1">
