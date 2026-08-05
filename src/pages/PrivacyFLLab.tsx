@@ -266,6 +266,9 @@ export default function PrivacyFLLab() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <p className="text-[11px] font-mono text-warning">
+                Simulation only — this FedAvg demo does not train the CTI pipeline, which stays zero-shot on a frozen model.
+              </p>
               {!flResult && (
                 <p className="text-xs text-muted-foreground">
                   Each client trains a logistic head locally for 2 epochs; server averages weights
