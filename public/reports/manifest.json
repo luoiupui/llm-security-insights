@@ -2,6 +2,11 @@
   "generatedAt": "2026-04-23T22:00:00.000Z",
   "files": [
     {
+      "name": "corpus-augmentation-feasibility.md",
+      "bytes": 7900,
+      "sha256": "corpusaugfeas001"
+    },
+    {
       "name": "corpus-and-evaluation-document-index.md",
       "bytes": 7400,
       "sha256": "corpusevalindex001"
