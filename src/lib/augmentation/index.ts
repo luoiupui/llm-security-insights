@@ -132,13 +132,8 @@ export const augStats = {
     A2: familyCount("A2"),
     A3: familyCount("A3"),
   },
-  perTransform: TRANSFORMS.reduce<Record<string, number>>((acc, _t, i) => {
-    const id = augmentedVariants.find((v) => v.transform)?.transform;
-    void id;
-    void i;
-    return acc;
-  }, {}),
   maxVariantsPerSeed: Math.max(...[...groupBySeed().values()].map((v) => v.length), 0),
+
   minVariantsPerSeed: Math.min(...[...groupBySeed().values()].map((v) => v.length), 0),
   /** The number that may appear in a CI — unchanged by augmentation. */
   independentLabels: sampleTestCases.length,
