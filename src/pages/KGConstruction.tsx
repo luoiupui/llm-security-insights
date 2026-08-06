@@ -5,7 +5,7 @@ import {
   Network, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle,
   DownloadCloud, Sparkles, FileText, FlaskConical, Rss, Upload, Plug,
   LayoutDashboard, Crosshair, RefreshCw, GitBranch, Workflow, Gauge, Share2, Brain,
-  ImageDown, Bot,
+  ImageDown, Bot, Layers,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import { persistExtraction, type ThreatEntity, type ThreatRelation, type ReproCo
 import { supabase } from "@/integrations/supabase/client";
 import { CorpusHealth } from "@/components/CorpusHealth";
 import { sampleTestCases } from "@/lib/test-corpus";
+import { augStats, augmentedVariants, TRANSFORM_LABEL } from "@/lib/augmentation";
 import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel";
 import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
@@ -80,6 +81,7 @@ const DOWNSTREAM_CONSUMERS: ConsumerCard[] = [
 export default function KGConstruction() {
   const [inputText, setInputText] = useState(SAMPLE);
   const [activeSource, setActiveSource] = useState("paste");
+  const [selectedAugId, setSelectedAugId] = useState<string>("");
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
   const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
@@ -137,6 +139,15 @@ export default function KGConstruction() {
     if (tc) {
       setInputText(tc.text);
       toast.success(`Loaded corpus case ${tc.id} — ${tc.source}`);
+    }
+  };
+
+  const handleSelectAug = (id: string) => {
+    setSelectedAugId(id);
+    const v = augmentedVariants.find((x) => x.id === id);
+    if (v) {
+      setInputText(v.text);
+      toast.success(`Loaded ${v.id} — ${TRANSFORM_LABEL[v.transform]} (derived from ${v.seedId})`);
     }
   };
 
@@ -643,7 +654,9 @@ export default function KGConstruction() {
             <TabsList className="bg-secondary/50 flex-wrap h-auto">
               <TabsTrigger value="paste" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Paste text</TabsTrigger>
               <TabsTrigger value="corpus" className="gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Curated corpus (n={domainCases.length}, gold)</TabsTrigger>
+              <TabsTrigger value="goldaug" className="gap-1.5"><Layers className="w-3.5 h-3.5" />GoldAug-CTI v1 (n={augStats.variants}, derived)</TabsTrigger>
               <TabsTrigger value="n1k" className="gap-1.5"><Database className="w-3.5 h-3.5" />N1K batch (bench_cases)</TabsTrigger>
+
               <TabsTrigger value="feed" className="gap-1.5"><Rss className="w-3.5 h-3.5" />Live feed</TabsTrigger>
               <TabsTrigger value="upload" disabled className="gap-1.5 opacity-60"><Upload className="w-3.5 h-3.5" />Upload file</TabsTrigger>
               <TabsTrigger value="api" disabled className="gap-1.5 opacity-60"><Plug className="w-3.5 h-3.5" />External API</TabsTrigger>
@@ -689,6 +702,37 @@ export default function KGConstruction() {
                 </>
               )}
             </TabsContent>
+
+            <TabsContent value="goldaug" className="mt-3 space-y-2">
+              <div className="p-2 rounded bg-warning/10 border border-warning/30 text-[11px] text-warning">
+                <strong>GoldAug-CTI v1</strong> — {augStats.variants} variants derived from the {augStats.seeds} gold seeds
+                (alias swaps, defanged IOCs, boilerplate distractors, sentence rotation, prompt injection, temporal defects).
+                Kept <strong>separate</strong> from Gold-56: useful for stress-loading KG construction and robustness checks,
+                but it adds <strong>no independent labels</strong> (n stays {augStats.independentLabels}).
+              </div>
+              <Select value={selectedAugId} onValueChange={handleSelectAug}>
+                <SelectTrigger className="bg-secondary/30">
+                  <SelectValue placeholder={`Select 1 of ${augStats.variants} derived variants…`} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {augmentedVariants.map((v) => (
+                    <SelectItem key={v.id} value={v.id} className="text-xs">
+                      <span className="font-mono">{v.id}</span> — {TRANSFORM_LABEL[v.transform]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                className="min-h-[80px] font-mono text-xs bg-secondary/30"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Full browser and JSON export: <Link to="/experiments" className="underline">Experiments → GoldAug (robustness)</Link>.
+              </p>
+            </TabsContent>
+
+
 
             <TabsContent value="n1k" className="mt-3 space-y-2">
               <div className="p-2 rounded bg-info/10 border border-info/30 text-[11px] text-info-foreground/90">
