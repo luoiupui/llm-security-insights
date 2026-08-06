@@ -139,23 +139,14 @@ const DOMAIN_RE = /\b([a-z0-9][a-z0-9-]*)\.(com|net|org|io|ru|cn|top|xyz|info|co
 const IP_RE = /\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/g;
 
 export function a1DefangIoc(seed: TestSample): AugmentedSample | null {
-  let text = seed.text;
-  let hit = false;
-  if (DOMAIN_RE.test(text)) {
-    hit = true;
-    text = text.replace(DOMAIN_RE, (_m, a, b) => `${a}[.]${b}`);
-  }
-  if (IP_RE.test(text)) {
-    hit = true;
-    text = text.replace(IP_RE, (_m, a, b, c, d) => `${a}.${b}.${c}[.]${d}`);
-  }
-  if (/https?:\/\//i.test(text)) {
-    hit = true;
-    text = text.replace(/http(s?):\/\//gi, (_m, s) => `hxxp${s}://`);
-  }
-  return hit
-    ? make(seed, "a1-defang-ioc", text, "Defanged indicators must still resolve to the canonical IOC.")
-    : null;
+  const before = seed.text;
+  let text = before
+    .replace(new RegExp(DOMAIN_RE.source, "gi"), (_m, a, b) => `${a}[.]${b}`)
+    .replace(new RegExp(IP_RE.source, "g"), (_m, a, b, c, d) => `${a}.${b}.${c}[.]${d}`)
+    .replace(/http(s?):\/\//gi, (_m, s) => `hxxp${s}://`);
+  if (text === before) return null;
+  return make(seed, "a1-defang-ioc", text, "Defanged indicators must still resolve to the canonical IOC.");
+
 }
 
 export function a1CveCase(seed: TestSample): AugmentedSample | null {
