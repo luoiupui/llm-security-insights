@@ -338,11 +338,17 @@ export default function Experiments() {
           <TabsTrigger value="kgbench">KG-Bench</TabsTrigger>
           <TabsTrigger value="pathway">Pathway B vs C</TabsTrigger>
           <TabsTrigger value="corpus">Corpus N1K</TabsTrigger>
+          <TabsTrigger value="goldaug">GoldAug (robustness)</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="goldaug" className="mt-4">
+          <AugmentedCorpusPanel />
+        </TabsContent>
 
         <TabsContent value="kgbench" className="mt-4">
           <KGBenchPanel />
         </TabsContent>
+
 
         <TabsContent value="pathway" className="mt-4">
           <PathwayComparisonPanel />
