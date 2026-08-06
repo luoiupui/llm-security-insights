@@ -20,6 +20,7 @@ import {
   getStage1Results, getStage2Results, type ExperimentResult
 } from "@/lib/experiment-config";
 import { corpusStats } from "@/lib/test-corpus";
+import { AugmentedCorpusPanel } from "@/components/AugmentedCorpusPanel";
 import { useToast } from "@/hooks/use-toast";
 import { ReportDownloads } from "@/components/ReportDownloads";
 import { KGBenchPanel } from "@/components/KGBenchPanel";
