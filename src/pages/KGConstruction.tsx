@@ -20,6 +20,7 @@ import { persistExtraction, type ThreatEntity, type ThreatRelation, type ReproCo
 import { supabase } from "@/integrations/supabase/client";
 import { CorpusHealth } from "@/components/CorpusHealth";
 import { sampleTestCases } from "@/lib/test-corpus";
+import { augStats, augmentedVariants, TRANSFORM_LABEL } from "@/lib/augmentation";
 import { ReproPanel, loadRepro, type ReproPreset } from "@/components/ReproPanel";
 import { buildTimelineLayout, causalColor, CAUSAL_TYPES } from "@/lib/timeline-layout";
 import { toast } from "sonner";
@@ -80,6 +81,7 @@ const DOWNSTREAM_CONSUMERS: ConsumerCard[] = [
 export default function KGConstruction() {
   const [inputText, setInputText] = useState(SAMPLE);
   const [activeSource, setActiveSource] = useState("paste");
+  const [selectedAugId, setSelectedAugId] = useState<string>("");
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
   const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
@@ -137,6 +139,15 @@ export default function KGConstruction() {
     if (tc) {
       setInputText(tc.text);
       toast.success(`Loaded corpus case ${tc.id} — ${tc.source}`);
+    }
+  };
+
+  const handleSelectAug = (id: string) => {
+    setSelectedAugId(id);
+    const v = augmentedVariants.find((x) => x.id === id);
+    if (v) {
+      setInputText(v.text);
+      toast.success(`Loaded ${v.id} — ${TRANSFORM_LABEL[v.transform]} (derived from ${v.seedId})`);
     }
   };
 
