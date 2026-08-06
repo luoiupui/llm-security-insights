@@ -692,6 +692,37 @@ export default function KGConstruction() {
               )}
             </TabsContent>
 
+            <TabsContent value="goldaug" className="mt-3 space-y-2">
+              <div className="p-2 rounded bg-warning/10 border border-warning/30 text-[11px] text-warning">
+                <strong>GoldAug-CTI v1</strong> — {augStats.variants} variants derived from the {augStats.seeds} gold seeds
+                (alias swaps, defanged IOCs, boilerplate distractors, sentence rotation, prompt injection, temporal defects).
+                Kept <strong>separate</strong> from Gold-56: useful for stress-loading KG construction and robustness checks,
+                but it adds <strong>no independent labels</strong> (n stays {augStats.independentLabels}).
+              </div>
+              <Select value={selectedAugId} onValueChange={handleSelectAug}>
+                <SelectTrigger className="bg-secondary/30">
+                  <SelectValue placeholder={`Select 1 of ${augStats.variants} derived variants…`} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {augmentedVariants.map((v) => (
+                    <SelectItem key={v.id} value={v.id} className="text-xs">
+                      <span className="font-mono">{v.id}</span> — {TRANSFORM_LABEL[v.transform]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                className="min-h-[80px] font-mono text-xs bg-secondary/30"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Full browser and JSON export: <Link to="/experiments" className="underline">Experiments → GoldAug (robustness)</Link>.
+              </p>
+            </TabsContent>
+
+
+
             <TabsContent value="n1k" className="mt-3 space-y-2">
               <div className="p-2 rounded bg-info/10 border border-info/30 text-[11px] text-info-foreground/90">
                 <strong>N1K batch corpus</strong> — bulk-ingested documents from CISA KEV, MITRE ATT&amp;CK Groups, JPCERT/CC, CNCERT, vendor PSIRTs with mandatory attribution.
