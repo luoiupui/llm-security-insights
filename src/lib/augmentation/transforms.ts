@@ -140,7 +140,7 @@ const IP_RE = /\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/g;
 
 export function a1DefangIoc(seed: TestSample): AugmentedSample | null {
   const before = seed.text;
-  let text = before
+  const text = before
     .replace(new RegExp(DOMAIN_RE.source, "gi"), (_m, a, b) => `${a}[.]${b}`)
     .replace(new RegExp(IP_RE.source, "g"), (_m, a, b, c, d) => `${a}.${b}.${c}[.]${d}`)
     .replace(/http(s?):\/\//gi, (_m, s) => `hxxp${s}://`);
@@ -191,7 +191,7 @@ function splitSentences(text: string): string[] {
 export function a2SentenceRotate(seed: TestSample): AugmentedSample | null {
   if (seed.groundTruth.causalLinks?.length) return null;
   const parts = splitSentences(seed.text);
-  if (parts.length < 3) return null;
+  if (parts.length < 2) return null;
   const rotated = [parts[parts.length - 1], ...parts.slice(0, -1)].join(" ");
   return make(
     seed,

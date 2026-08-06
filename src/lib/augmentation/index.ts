@@ -132,9 +132,9 @@ export const augStats = {
     A2: familyCount("A2"),
     A3: familyCount("A3"),
   },
-  maxVariantsPerSeed: Math.max(...[...groupBySeed().values()].map((v) => v.length), 0),
+  maxVariantsPerSeed: Math.max(...[...groupBySeed().values()].map((v) => v.length)),
 
-  minVariantsPerSeed: Math.min(...[...groupBySeed().values()].map((v) => v.length), 0),
+  minVariantsPerSeed: Math.min(...[...groupBySeed().values()].map((v) => v.length)),
   /** The number that may appear in a CI — unchanged by augmentation. */
   independentLabels: sampleTestCases.length,
 };
