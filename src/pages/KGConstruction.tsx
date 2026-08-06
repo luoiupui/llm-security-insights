@@ -5,7 +5,7 @@ import {
   Network, ArrowRight, Play, Loader2, Database, ShieldCheck, AlertTriangle,
   DownloadCloud, Sparkles, FileText, FlaskConical, Rss, Upload, Plug,
   LayoutDashboard, Crosshair, RefreshCw, GitBranch, Workflow, Gauge, Share2, Brain,
-  ImageDown, Bot,
+  ImageDown, Bot, Layers,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
