@@ -643,7 +643,9 @@ export default function KGConstruction() {
             <TabsList className="bg-secondary/50 flex-wrap h-auto">
               <TabsTrigger value="paste" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Paste text</TabsTrigger>
               <TabsTrigger value="corpus" className="gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Curated corpus (n={domainCases.length}, gold)</TabsTrigger>
+              <TabsTrigger value="goldaug" className="gap-1.5"><Layers className="w-3.5 h-3.5" />GoldAug-CTI v1 (n={augStats.variants}, derived)</TabsTrigger>
               <TabsTrigger value="n1k" className="gap-1.5"><Database className="w-3.5 h-3.5" />N1K batch (bench_cases)</TabsTrigger>
+
               <TabsTrigger value="feed" className="gap-1.5"><Rss className="w-3.5 h-3.5" />Live feed</TabsTrigger>
               <TabsTrigger value="upload" disabled className="gap-1.5 opacity-60"><Upload className="w-3.5 h-3.5" />Upload file</TabsTrigger>
               <TabsTrigger value="api" disabled className="gap-1.5 opacity-60"><Plug className="w-3.5 h-3.5" />External API</TabsTrigger>
