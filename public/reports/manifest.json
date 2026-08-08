@@ -2,6 +2,11 @@
   "generatedAt": "2026-04-23T22:00:00.000Z",
   "files": [
     {
+      "name": "semantic-web-stack-threatrag-feasibility.md",
+      "bytes": 9200,
+      "sha256": "semwebfeas001"
+    },
+    {
       "name": "corpus-augmentation-feasibility.md",
       "bytes": 7900,
       "sha256": "corpusaugfeas001"
