@@ -128,7 +128,7 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const gateway = createLovableAiGatewayProvider(LOVABLE_API_KEY);
-    const model = gateway("google/gemini-3-flash-preview");
+    const model = gateway(Deno.env.get("LLM_MODEL") ?? "google/gemini-3-flash-preview");
 
     // Shared scratchpad — tools mutate so later steps can reference earlier outputs.
     const scratch: Record<string, unknown> = { domain };
