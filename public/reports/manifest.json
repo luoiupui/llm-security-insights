@@ -155,6 +155,11 @@
       "name": "external-benchmarks-loader.md",
       "bytes": 0,
       "sha256": "external-benchmarks-loader-v1"
+    },
+    {
+      "name": "local-deployment-migration-guide.md",
+      "bytes": 0,
+      "sha256": "local-deployment-migration-guide-v1"
     }
   ],
   "stats": {

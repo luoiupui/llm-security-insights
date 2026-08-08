@@ -1,3 +1,4 @@
+import { LLM_CHAT_URL, LLM_MODEL, llmHeaders } from "../_shared/llm-endpoint.ts";
 /**
  * Experiment Runner — runs LLM extraction + REAL baselines + metrics.
  *
@@ -19,7 +20,7 @@ const corsHeaders = {
 };
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const AI_GATEWAY = LLM_CHAT_URL;
 const MODEL = "google/gemini-3-flash-preview";
 
 const COT_SYSTEM = `You are a Graph-Native Cyber Threat Intelligence Reasoning Engine.
@@ -152,7 +153,7 @@ ${text}`;
 
   const resp = await fetch(AI_GATEWAY, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
+    headers: llmHeaders(LOVABLE_API_KEY),
     body: JSON.stringify({
       model: MODEL,
       messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],

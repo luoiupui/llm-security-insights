@@ -1,3 +1,4 @@
+import { LLM_CHAT_URL, LLM_MODEL, llmHeaders } from "../_shared/llm-endpoint.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 /**
@@ -333,7 +334,7 @@ async function callHyperedgeLLM(
   };
 
   const requestBody = JSON.stringify({
-    model: "google/gemini-3-flash-preview",
+    model: LLM_MODEL,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -349,7 +350,7 @@ async function callHyperedgeLLM(
   const maxAttempts = 4;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      response = await fetch(LLM_CHAT_URL, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: requestBody,

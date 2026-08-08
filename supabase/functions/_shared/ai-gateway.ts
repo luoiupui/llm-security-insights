@@ -5,7 +5,7 @@ import { createOpenAICompatible } from "npm:@ai-sdk/openai-compatible@^0.2";
 export const createLovableAiGatewayProvider = (lovableApiKey: string) =>
   createOpenAICompatible({
     name: "lovable",
-    baseURL: "https://ai.gateway.lovable.dev/v1",
+    baseURL: (Deno.env.get("LLM_BASE_URL") ?? "https://ai.gateway.lovable.dev/v1").replace(/\/+$/, ""),
     headers: {
       "Lovable-API-Key": lovableApiKey,
       "X-Lovable-AIG-SDK": "vercel-ai-sdk",

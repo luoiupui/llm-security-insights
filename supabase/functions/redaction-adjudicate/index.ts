@@ -1,3 +1,4 @@
+import { LLM_CHAT_URL, LLM_MODEL, llmHeaders } from "../_shared/llm-endpoint.ts";
 // supabase/functions/redaction-adjudicate/index.ts
 // LLM adjudicator for selective redaction.
 // Receives text + candidate spans, returns per-span action (upgrade/keep/drop).
@@ -44,14 +45,14 @@ Reply with strict JSON: { "decisions": [{ "start": n, "end": n, "axis": "...", "
 
     const user = JSON.stringify({ text: body.text.slice(0, 4000), candidates: body.candidates });
 
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const r = await fetch(LLM_CHAT_URL, {
       method: "POST",
       headers: {
-        "Lovable-API-Key": apiKey,
-        "Content-Type": "application/json",
+        ...llmHeaders(apiKey),
+
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: LLM_MODEL,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },

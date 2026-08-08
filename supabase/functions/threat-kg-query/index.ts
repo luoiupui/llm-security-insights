@@ -1,3 +1,4 @@
+import { LLM_CHAT_URL, LLM_MODEL, llmHeaders } from "../_shared/llm-endpoint.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -142,14 +143,14 @@ serve(async (req) => {
 });
 
 async function performGraphAttribution(apiKey: string, query: string, graphData: any) {
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch(LLM_CHAT_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: LLM_MODEL,
       messages: [
         { role: "system", content: GRAPH_AWARE_ATTRIBUTION_PROMPT },
         {
@@ -267,14 +268,14 @@ Cite evidence as GRAPH PATHS (node→edge→node→edge→node), not text quotes
 }
 
 async function reconstructGraphAttackPath(apiKey: string, graphData: any) {
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch(LLM_CHAT_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: LLM_MODEL,
       messages: [
         {
           role: "system",
@@ -302,14 +303,14 @@ Map each step to MITRE ATT&CK tactics. The path should follow graph edges, not t
 }
 
 async function predictFromGraph(apiKey: string, graphData: any) {
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch(LLM_CHAT_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: LLM_MODEL,
       messages: [
         {
           role: "system",
