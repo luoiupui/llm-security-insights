@@ -1,3 +1,4 @@
+import { LLM_CHAT_URL, LLM_MODEL, llmHeaders } from "../_shared/llm-endpoint.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
@@ -521,14 +522,14 @@ function computeCredibilityScore(entities: Entity[], relations: Relation[], sour
 async function resolveConflictsWithLLM(apiKey: string, conflicts: ConflictResult[], entities: Entity[], relations: Relation[]): Promise<string> {
   try {
     const failedConflicts = conflicts.filter(c => c.status !== "pass");
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(LLM_CHAT_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: LLM_MODEL,
         messages: [
           { role: "system", content: "You are a cybersecurity KG analyst. Provide brief, actionable resolution recommendations for Knowledge Graph structural conflicts. Focus on graph-level fixes: merge nodes, redirect edges, adjust confidence propagation." },
           { role: "user", content: `Graph conflicts detected:\n${JSON.stringify(failedConflicts, null, 2)}\n\nNodes: ${entities.map(e => `${e.name}(${e.type})`).join(", ")}\nEdge count: ${relations.length}` },
