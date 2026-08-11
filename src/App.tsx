@@ -17,6 +17,7 @@ import ImplementationLog from "./pages/ImplementationLog";
 import GitHubSync from "./pages/GitHubSync";
 import AISystemThreatModel from "./pages/AISystemThreatModel";
 import PrivacyFLLab from "./pages/PrivacyFLLab";
+import FineTuneLab from "./pages/FineTuneLab";
 import RedactionLab from "./pages/RedactionLab";
 import NotFound from "./pages/NotFound";
 
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/github-sync" element={<GitHubSync />} />
             <Route path="/threat-model" element={<AISystemThreatModel />} />
             <Route path="/privacy-fl-lab" element={<PrivacyFLLab />} />
+            <Route path="/finetune-lab" element={<FineTuneLab />} />
             <Route path="/redaction-lab" element={<RedactionLab />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

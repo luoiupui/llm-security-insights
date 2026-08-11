@@ -17,6 +17,7 @@ const mainItems = [
   { title: "KG Construction", url: "/kg-construction", icon: Network },
   { title: "Attribution Reasoning", url: "/attribution", icon: Brain },
   { title: "Experiments", url: "/experiments", icon: FlaskConical },
+  { title: "Fine-Tune Lab (sim)", url: "/finetune-lab", icon: Cpu },
 ];
 
 const securityItems = [
