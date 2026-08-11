@@ -51,8 +51,9 @@ The evaluation loop is strictly: **input document → frozen model → predicted
 ## 4. Explicit carve-outs (things that look like training but are not part of the CTI pipeline)
 
 1. **Privacy & FL Lab** (`src/pages/PrivacyFLLab.tsx`, `src/lib/privacy/fl-fedavg.ts`). A *simulation-only* federated-learning demonstrator: it trains a small logistic head on synthetic client data to illustrate FedAvg, differential privacy, secure aggregation, and membership-inference risk. It is a research-illustration track for the privacy chapter. It does not touch the extractor, the prompts, or the KG.
-2. **"ML feedback loop"** on the KG Construction capability list. Marked `reserved` — not implemented. If it were ever implemented it would introduce a learned component and this attestation would have to be revised.
-3. **Reproducibility controls** (`ReproPanel`: temperature, seed, top-K, frozen snapshot). These change *sampling*, not model parameters.
+2. **Fine-Tuning Simulation Lab** (`src/pages/FineTuneLab.tsx`, `src/lib/finetune/sim.ts`). A *simulation-only* demonstrator of LoRA / QLoRA / SFT / DPO / knowledge distillation. It runs real SGD, but on a 24-parameter linear head over a deterministic hash featurizer — never on an LLM, and with no LLM call anywhere in the module. Gold-56 is read in the browser to build a didactic binary task; nothing is written back and the extraction path is untouched. See `fine-tuning-feasibility-and-simulation.md`.
+3. **"ML feedback loop"** on the KG Construction capability list. Marked `reserved` — not implemented. If it were ever implemented it would introduce a learned component and this attestation would have to be revised.
+4. **Reproducibility controls** (`ReproPanel`: temperature, seed, top-K, frozen snapshot). These change *sampling*, not model parameters.
 
 ---
 
@@ -72,7 +73,7 @@ rg -n "corpus|gold" supabase/functions/threat-extract/index.ts   # expect: no ma
 rg -n "from \"./corpus\"|kg-bench/corpus" src/
 ```
 
-Expected outcome: matches for (1) only inside `src/lib/privacy/` and `src/pages/PrivacyFLLab.tsx` (the simulation track); no matches for (3).
+Expected outcome: matches for (1) only inside `src/lib/privacy/`, `src/pages/PrivacyFLLab.tsx`, `src/lib/finetune/` and `src/pages/FineTuneLab.tsx` (the two simulation tracks); no matches for (3).
 
 ---
 
