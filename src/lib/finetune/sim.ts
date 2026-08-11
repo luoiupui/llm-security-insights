@@ -272,10 +272,13 @@ export function train(opts: TrainOptions): TrainResult {
     teacher = { w: tw, b: tb };
   }
 
+  // LoRA scaling alpha/r keeps the adapter's effective step independent of rank
+  const scale = 1 / Math.max(1, rank);
+
   const effective = () => {
     if (!lowRank) return { w, b };
     const delta = new Array(DIM).fill(0);
-    for (let k = 0; k < rank; k++) for (let i = 0; i < DIM; i++) delta[i] += Bv[k] * A[k][i];
+    for (let k = 0; k < rank; k++) for (let i = 0; i < DIM; i++) delta[i] += scale * Bv[k] * A[k][i];
     return { w: base.map((x, i) => x + delta[i]), b };
   };
 
@@ -290,16 +293,16 @@ export function train(opts: TrainOptions): TrainResult {
       for (const r of train) {
         const { w: we } = effective();
         const err = sigmoid(dot(r.x, we) + b) - r.y;
-        // dL/dB_k = err * (A_k · x) ; dL/dA_ki = err * B_k * x_i  (base frozen)
+        // dL/dB_k = s * err * (A_k · x) ; dL/dA_ki = s * err * B_k * x_i  (base frozen)
         for (let k = 0; k < rank; k++) {
           const ax = dot(A[k], r.x);
-          const gB = err * ax;
           const bk = Bv[k];
-          Bv[k] -= lr * gB;
-          for (let i = 0; i < DIM; i++) A[k][i] -= lr * err * bk * r.x[i];
+          Bv[k] -= lr * scale * err * ax;
+          for (let i = 0; i < DIM; i++) A[k][i] -= lr * scale * err * bk * r.x[i];
         }
         b -= lr * err;
       }
+
     } else if (method === "dpo") {
       // preference pairs: chosen = the gold-consistent row, rejected = a corrupted twin
       for (const r of train) {
