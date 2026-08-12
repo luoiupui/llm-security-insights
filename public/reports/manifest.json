@@ -170,6 +170,11 @@
       "name": "local-deployment-migration-guide.md",
       "bytes": 0,
       "sha256": "local-deployment-migration-guide-v1"
+    },
+    {
+      "name": "full-stack-architecture-assessment.md",
+      "bytes": 8200,
+      "sha256": "full-stack-arch-assessment-v1"
     }
   ],
   "stats": {
