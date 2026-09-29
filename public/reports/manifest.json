@@ -175,6 +175,11 @@
       "name": "full-stack-architecture-assessment.md",
       "bytes": 8200,
       "sha256": "full-stack-arch-assessment-v1"
+    },
+    {
+      "name": "finetune-lab-workflow.md",
+      "bytes": 0,
+      "sha256": "finetune-lab-workflow-v1"
     }
   ],
   "stats": {
