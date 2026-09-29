@@ -2,7 +2,7 @@
 
 **Question addressed:** can LoRA, QLoRA, SFT, DPO or knowledge distillation be applied to the LLM used by this project? If not, what simulation illustrates the workflow?
 
-**Verdict:** real adaptation of the production backbone is **not possible and not desirable today**. A clearly isolated *Fine-Tuning Simulation Lab* (`/finetune-lab`) reproduces the workflow of all five techniques with genuine gradient descent on a toy head.
+**Verdict:** real adaptation of the production backbone is **not possible and not desirable today**. A clearly isolated *Fine-Tuning Simulation Lab* (`/finetune-lab`) reproduces the workflow of all five techniques with genuine gradient descent on a toy head. *See also:* **[finetune-lab-workflow.md](finetune-lab-workflow.md)** — the standalone step-by-step workflow document with the pipeline diagram.
 
 ---
 
