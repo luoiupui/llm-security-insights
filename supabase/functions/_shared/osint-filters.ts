@@ -70,7 +70,7 @@ export function checkIoc(token: string, nowYear = new Date().getUTCFullYear()): 
   return { ok: true };
 }
 
-const IOC_RE = /(\b\d{1,3}(?:\.\d{1,3}){3}\b|\b[a-f0-9]{30,}\b|\bCVE-[\w-]+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|io)\b)/gi;
+const IOC_RE = /(\b\d{1,3}(?:\.\d{1,3}){3}\b|\b[a-f0-9]{30,}\b|\bCVE-[0-9-]*[0-9]|\b[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|io)\b)/gi;
 
 /** All indicator-looking tokens in an entity's name / id / value. */
 export function iocTokens(e: { name?: string; mitre_id?: string | null; value?: string }): string[] {
