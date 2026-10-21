@@ -62,8 +62,19 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Pre-load all KB entries (small table)
-    const { data: kb } = await supabase.from("kb_entries").select("*");
+    // Pre-load ALL KB entries, paginated (the Data API caps each request at 1000 rows)
+    const kb: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error: pageErr } = await supabase
+        .from("kb_entries")
+        .select("kb_type, external_id, name")
+        .order("id", { ascending: true })
+        .range(from, from + 999);
+      if (pageErr) throw pageErr;
+      if (!page || page.length === 0) break;
+      kb.push(...page);
+      if (page.length < 1000) break;
+    }
     const techniqueSet = new Set<string>(), tacticSet = new Set<string>(), cveSet = new Set<string>(), capecSet = new Set<string>();
     const nameById = new Map<string, string>();
     (kb || []).forEach((row: any) => {
