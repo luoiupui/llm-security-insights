@@ -45,3 +45,12 @@ describe("L1 / L2 entity filters", () => {
     expect(filterL2([{ name: "APT29", type: "threat_actor", confidence: 0.5 }], [], 0.75).kept).toHaveLength(1);
   });
 });
+
+describe("CVE token inside a longer name", () => {
+  it("keeps 'CVE-2020-11651_Exploitation' (valid CVE with suffix)", () => {
+    expect(filterL1([{ name: "CVE-2020-11651_Exploitation", type: "ttp" }], new Set()).kept).toHaveLength(1);
+  });
+  it("still drops 'CVE-2023-99 exploit'", () => {
+    expect(filterL1([{ name: "CVE-2023-99 exploit", type: "ttp" }], new Set()).kept).toHaveLength(0);
+  });
+});
