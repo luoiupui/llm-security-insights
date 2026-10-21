@@ -205,6 +205,11 @@
       "name": "graph-native-boundary-examples.md",
       "bytes": 52218,
       "sha256": "00bdeba72c75"
+    },
+    {
+      "name": "dynamic-rules-and-novel-apt-defense.md",
+      "bytes": 13370,
+      "sha256": "ba62086a266c"
     }
   ],
   "stats": {
