@@ -185,6 +185,11 @@
       "name": "symbolic-rules-formal-specification.md",
       "bytes": 0,
       "sha256": "symbolic-rules-spec-v1"
+    },
+    {
+      "name": "D-S application.md",
+      "bytes": 10077,
+      "sha256": "3c569c6cf6c2"
     }
   ],
   "stats": {
