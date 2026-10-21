@@ -138,7 +138,8 @@ function preprocessText(text: string, sourceType: string): PreprocessResult {
   let match;
   while ((match = ipRegex.exec(cleaned)) !== null) {
     const ip = match[1];
-    if (!ip.startsWith("0.") && !ip.startsWith("127.") && !ip.startsWith("10.") && !ip.startsWith("192.168.")) {
+    const validOctets = ip.split(".").every((o) => Number(o) <= 255);
+    if (validOctets && !ip.startsWith("0.") && !ip.startsWith("127.") && !ip.startsWith("10.") && !ip.startsWith("192.168.")) {
       iocs.push({ type: "ipv4", value: ip, defanged: ip.replace(/\./g, "[.]") });
     }
   }
