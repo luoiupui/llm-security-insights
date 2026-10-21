@@ -8,6 +8,7 @@ import {
   provenancePenalty,
   RULE_KERNEL_VERSION,
 } from "../_shared/rules/registry.ts";
+import { filterL2 } from "../_shared/osint-filters.ts";
 
 
 const corsHeaders = {
@@ -325,6 +326,11 @@ serve(async (req) => {
       adaptive_violations: adaptive.violations,
       // PH3: Pathway C joint-validity block (R14–R16). null when mode !== "hyperedges".
       hyperedge_conflicts: hyperedgeBlock,
+      // L2 live filter (R4 floor + R11/R8 weak-support attribution) — additive
+      ...(() => {
+        const l2 = filterL2(entities as any[], relations as any[], source_reliability);
+        return { supported_entities: l2.kept, unsupported_entities: l2.dropped };
+      })(),
     }), {
 
       headers: { ...corsHeaders, "Content-Type": "application/json" },

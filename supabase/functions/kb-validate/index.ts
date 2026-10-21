@@ -10,6 +10,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { checkIoc, filterL1, normName } from "../_shared/osint-filters.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -114,11 +115,13 @@ serve(async (req) => {
           matched_name: nameById.get(value) ?? null, ...ctx,
         });
       } else if (cveRe.test(value)) {
+        const known = cveSet.has(value.toUpperCase());
+        const yearOk = checkIoc(value).ok;
         findings.push({
-          kind: cveSet.has(value.toUpperCase()) ? "ok" : "non_canonical",
+          kind: known ? "ok" : (yearOk ? "non_canonical" : "hallucinated"),
           id_type: "cve", raw_value: value,
           matched_name: nameById.get(value.toUpperCase()) ?? null,
-          suggestion: cveSet.has(value.toUpperCase()) ? null : "Not in local KB snapshot — verify against NVD",
+          suggestion: known ? null : (yearOk ? "Not in local KB snapshot — verify against NVD" : "Implausible CVE year"),
           ...ctx,
         });
       } else if (capecRe.test(value)) {
@@ -230,7 +233,16 @@ serve(async (req) => {
       metadata: { summary, accuracy, synthesized_campaign: synthesized?.entity?.name ?? null },
     });
 
-    return new Response(JSON.stringify({ findings, summary, accuracy, kb_size: kb?.length ?? 0, synthesized }), {
+    // L1 live filter (ontology + KB + identifier hygiene) — additive output fields
+    const hallucinatedNames = new Set(
+      findings.filter((f) => f.kind === "hallucinated" && f.id_type !== "stix_sdo" && f.entity_name).map((f) => normName(f.entity_name)),
+    );
+    const l1 = filterL1(entities as any[], hallucinatedNames);
+
+    return new Response(JSON.stringify({
+      findings, summary, accuracy, kb_size: kb?.length ?? 0, synthesized,
+      admitted_entities: l1.kept, dropped_entities: l1.dropped,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
