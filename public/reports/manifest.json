@@ -180,6 +180,11 @@
       "name": "finetune-lab-workflow.md",
       "bytes": 0,
       "sha256": "finetune-lab-workflow-v1"
+    },
+    {
+      "name": "symbolic-rules-formal-specification.md",
+      "bytes": 0,
+      "sha256": "symbolic-rules-spec-v1"
     }
   ],
   "stats": {
